@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.15)
 project(Dropfolder)
 
 # Set warning and errors flags
-set(warnings "-Wall -Wextra -Werror")
+set(warnings "-Wall -Wextra -Wno-error=unused-variable")
 set(CMAKE_CXX_FLAGS "${warnings}")
 set(CMAKE_C_FLAGS "${warnings}")
 
