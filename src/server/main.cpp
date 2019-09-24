@@ -4,6 +4,6 @@
 #include "server.hpp"
 
 int main() {
-    std::cout << "Hello, I am " << SERVER_NAME << ", the value of pi is " << get_pi() << std::endl;
+    std::cout << "Hello, I am " << SERVER_NAME << std::endl;
     return 0;
 }
