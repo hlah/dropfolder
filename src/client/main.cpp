@@ -2,6 +2,7 @@
 #include <cstdlib>
 
 #include "common.hpp"
+#include "sync_manager.hpp"
 
 void print_usage();
 
@@ -16,6 +17,7 @@ int main(int argc, char** argv) {
     int port = std::atoi( argv[3] );
 
     // TODO: Conecta com o servidor e inicia sincronização 
+    SyncManager sync_manager{ server_addr, port, username, "./sync_dir" };
 
     bool quit = false;
     std::string user_input;
