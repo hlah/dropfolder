@@ -1,10 +1,16 @@
 cmake_minimum_required(VERSION 3.15)
 project(Dropfolder)
 
+# compile flags for editor completion
+set( CMAKE_EXPORT_COMPILE_COMMANDS ON )
+
 # Set warning and errors flags
 set(warnings "-Wall -Wextra -Wno-error=unused-variable")
-set(CMAKE_CXX_FLAGS "${warnings}")
-set(CMAKE_C_FLAGS "${warnings}")
+set(CMAKE_CXX_FLAGS "-g ${warnings}")
+set(CMAKE_C_FLAGS "-g ${warnings}")
+
+# Find pthreads
+find_package(Threads)
 
 # Get source files
 file(GLOB_RECURSE COMMON_SOURCE ${CMAKE_SOURCE_DIR}/src/common/*.cpp)
@@ -19,6 +25,8 @@ file(GLOB_RECURSE CLIENT_SOURCE ${CMAKE_SOURCE_DIR}/src/client/*.cpp)
 # Add executables
 add_executable(server ${COMMON_SOURCE} ${SERVER_SOURCE})
 add_executable(client ${COMMON_SOURCE} ${CLIENT_SOURCE})
+target_link_libraries(client ${CMAKE_THREAD_LIBS_INIT})
+
 
 # Include folders
 include_directories(${CMAKE_SOURCE_DIR}/include/common)
