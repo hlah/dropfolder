@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <limits.h>
 #include <sys/inotify.h>
+#include <fcntl.h>
 
 #define MAX_EVENTS 1024
 #define BUF_LEN MAX_EVENTS * ( sizeof(inotify_event) + NAME_MAX )
@@ -14,6 +15,8 @@ Watcher::Watcher() {
     if( _fd < 0 ) {
         throw WatcherException{ std::string{ strerror(errno) } };
     }
+    int flags = fcntl(_fd, F_GETFL, 0);
+    fcntl(_fd, F_SETFL, flags | O_NONBLOCK);
 }
 
 Watcher::~Watcher() {
@@ -42,8 +45,8 @@ Watcher::Event Watcher::next() {
     if ( _event_queue.empty() ) {
         // read events
         auto bytes_read = read(_fd, buffer, BUF_LEN );
-        if( bytes_read < 0 ) {
-            throw WatcherException{ std::string{ strerror(errno) } };
+        if( bytes_read <= 0 ) {
+            return Event{ Watcher::EventType::NOEVENT, "" };
         }
 
         long long i = 0;
@@ -81,6 +84,9 @@ std::ostream& operator<<(std::ostream& os, const Watcher::EventType& e_type) {
             break;
         case Watcher::EventType::CREATED:
             os << "Created";
+            break;
+        case Watcher::EventType::NOEVENT:
+            os << "No event";
             break;
         default:
             os << "Unknown";

@@ -13,7 +13,8 @@ class Watcher {
             MODIFIED,
             REMOVED,
             CREATED,
-            UNKNOWKN
+            UNKNOWKN,
+            NOEVENT,
         };
 
         // Struct with event information
@@ -27,7 +28,7 @@ class Watcher {
 
         ~Watcher();
 
-        // Add direcotry to be watched
+        // Add directory to be watched
         void add_dir(const std::string& dir_name);
 
         // Add direcotry to be watched
