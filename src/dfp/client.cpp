@@ -24,6 +24,10 @@ int main(int argc, char*argv[])
 	inet_pton(AF_INET, "127.0.0.1", &(client.sin_addr));
 	bzero(&(client.sin_zero), 8);  
 
+	if(argc<2){
+		printf("usage:\n\t client localhost\n");
+		return 0;
+	}
 	server = gethostbyname(argv[1]);
 	if (server == NULL) {
         fprintf(stderr,"ERROR, no such host\n");
@@ -35,7 +39,7 @@ int main(int argc, char*argv[])
 	serv_addr.sin_addr = *((struct in_addr *)server->h_addr);
 	bzero(&(serv_addr.sin_zero), 8);  
 
-	dfp_service service= { dfp_service(4200, (struct sockaddr*)&serv_addr)};
+	dfp_service service= { dfp_service(4200, (struct sockaddr*)&serv_addr)};  //listening on 4200. Send to [127.0.0.1:6001]
 
     std::cout << "passed init_service." <<endl;
 	
@@ -48,7 +52,7 @@ int main(int argc, char*argv[])
 		bzero(buffer, 256);
 		fgets(buffer, 256, stdin);
 
-		printf("alloc size: %ld.\n", strlen(buffer));
+		printf("msg size: %ld.\n", strlen(buffer));
 		
 		service.sendmessage(buffer, strlen(buffer));
 
