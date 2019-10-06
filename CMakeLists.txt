@@ -35,3 +35,5 @@ target_include_directories(server PRIVATE ${CMAKE_SOURCE_DIR}/include/server)
 
 # Tests
 add_executable(watcher_test ${CMAKE_SOURCE_DIR}/tests/src/watcher_test.cpp ${COMMON_SOURCE})
+add_executable(client_test ${CMAKE_SOURCE_DIR}/tests/src/client_test.cpp ${COMMON_SOURCE})
+add_executable(server_test ${CMAKE_SOURCE_DIR}/tests/src/server_test.cpp ${COMMON_SOURCE})
