@@ -5,11 +5,13 @@
 #include "dfp_service.h"
 #include <stdlib.h>
 #include <arpa/inet.h>
+#include <unistd.h>
 
 using namespace std; 
 
 #define MAX_CHUNK_SIZE 512
 
+#define PACKET_RETRANSMIT_TIME_US 500000
 #define PACKET_HEADER_SIZE (sizeof(packet)-sizeof(const char* ))
 
 void* recv_thread(void*arg);
@@ -29,7 +31,7 @@ vector<vector<uint8_t>> dfp_service::split_message(uint16_t msgID, uint8_t* mess
 
 	while(msg_index<len){
 		vector<uint8_t> segment;
-		int payload_index;
+		uint16_t payload_index;
 		for(payload_index=0;payload_index< MAX_PAYLOAD_LEN; payload_index++){
 			if(msg_index+payload_index >= len){
 				break;
@@ -47,11 +49,12 @@ vector<vector<uint8_t>> dfp_service::split_message(uint16_t msgID, uint8_t* mess
 
 
 
-void dfp_service::WAIT_ACK(struct sockaddr_in* dest_addr, packet *sent_pckt)
+//void dfp_service::WAIT_ACK(struct sockaddr_in* dest_addr, packet *sent_pckt)
+void dfp_service::WAIT_ACK()
 {
     sockaddr_in src_addr;
-	int n;
     bool gotACK= false;
+	packet *sent_pckt= (packet*)(*transmitting_packet).data();
 
 	do{
 		while(this->ackQueue.empty());
@@ -60,59 +63,106 @@ void dfp_service::WAIT_ACK(struct sockaddr_in* dest_addr, packet *sent_pckt)
 		this->ackQueue.pop();
 		memcpy(&src_addr, &new_packet.src_addr, sizeof(sockaddr_in));
 
-        if(src_addr.sin_addr.s_addr == dest_addr->sin_addr.s_addr &&
-		   src_addr.sin_port == dest_addr->sin_port &&
+        if(src_addr.sin_addr.s_addr == transmitting_addr->sin_addr.s_addr &&
+		   src_addr.sin_port == transmitting_addr->sin_port &&
 		   new_packet.header.msgID == sent_pckt->msgID &&
            new_packet.header.seqn == sent_pckt->seqn){
             gotACK= true;
         }
     }while(!gotACK);
+
+	printf("GOT ACK!\n");
+}
+
+void* dfp_service::retransmit_thread(void*arg)
+{
+	dfp_service * dfp_inst= (dfp_service*)arg;
+    dfp_inst->retransmit();
+	pthread_exit(0);
+}
+
+void dfp_service::retransmit()
+{
+	while(1){
+		n= sendto( this->sockfd, 
+			       (*(this->transmitting_packet)).data(), 
+			       (*this->transmitting_packet).size(),
+			       0,
+			       (sockaddr *)transmitting_addr,
+			       sizeof(sockaddr_in));
+		if(n<0){
+			printf("error sending packet segment.\n");
+		}
+		usleep(PACKET_RETRANSMIT_TIME_US);
+		printf("retransmiting!\n");
+	}
 }
 
 
-void dfp_service::send_segments(vector<vector<uint8_t>> segments, const sockaddr* dest_addr)
+
+void dfp_service::send_segment(vector<uint8_t>*segment, const sockaddr_in* dest_addr)
 {
-	int n;
-	for(int i=0;i< segments.size();i++){
-		n= sendto(this->sockfd, segments[i].data(), segments[i].size(), 0, (sockaddr *)dest_addr, sizeof(sockaddr_in));
-		if(n<0){
-			printf("error sending packet segment #%d", i);
-		}
-		WAIT_ACK((sockaddr_in*)dest_addr, (packet*)segments[i].data());
+	pthread_t th_retransmit;
+	void *res;
+
+	this->transmitting_packet= segment;
+	this->transmitting_addr= dest_addr;
+	pthread_create(&th_retransmit, NULL, retransmit_thread, this);
+
+	WAIT_ACK();
+	
+	if(pthread_cancel(th_retransmit) != 0){
+		printf("error on pthread_cancel.\n");
+	}
+	pthread_join(th_retransmit, &res);
+	if(res != PTHREAD_CANCELED){
+		printf("error on pthread join.\n");
 	}
 }
 
 
 int dfp_service::sendmessage(const void* buf, size_t len)
 {
-	if(this->dest_addr){
-		sendmessage(buf, len, (sockaddr *)this->dest_addr);
-	}else{
+	if(!this->dest_addr){
 		printf("invalid call for sendmessage with no dst addr.\n");
+		return -1;
 	}
+	return sendmessage(buf, len, this->dest_addr);
 }
 
-int dfp_service::sendmessage(const void* buf, size_t len, const struct sockaddr *dest_addr)
+int dfp_service::sendmessage(const void* buf, size_t len, const struct sockaddr_in *dest_addr)
 {
-	send_segments(split_message(this->msgID++, (uint8_t*)buf, len), dest_addr);
+	vector<vector<uint8_t>>segments=  split_message(this->msgID++, (uint8_t*)buf, len);
+	for(size_t i=0;i < segments.size();i++){
+		send_segment(&(segments[i]), dest_addr);
+	}
+	return 0;
 }
 
 vector<uint8_t> dfp_service::recvmessage(struct sockaddr_in *src_addr)
 {
     //blocking implementation
-    while(messageQueue.empty());
+	while(messageQueue.empty());
 
-    message new_message ( messageQueue.front() );
-    
+	pthread_mutex_lock(&msgQueue_mutex);
+	message new_message ( messageQueue.front() );
 	messageQueue.pop();
+	pthread_mutex_unlock(&msgQueue_mutex);
 
-	memcpy(src_addr, &new_message.src_addr, sizeof(sockaddr_in));
+	if(src_addr!=NULL){
+		memcpy(src_addr, &new_message.src_addr, sizeof(sockaddr_in));
+	}
     return new_message.data;
 }
 
 int dfp_service::numMessages()
 {
-	return messageQueue.size();
+	int n;
+	pthread_mutex_lock(&msgQueue_mutex);
+	n= messageQueue.size();
+	pthread_mutex_unlock(&msgQueue_mutex);
+    
+	return  n;
 }
 
 dfp_service::~dfp_service(void)
@@ -130,14 +180,14 @@ dfp_service::dfp_service(int port, struct sockaddr *dest_addr)
 	}else{
 		this->dest_addr= NULL;
 	}
+	pthread_mutex_init(&this->msgQueue_mutex, NULL);
 
-	msgID= 0;
-	state= STATE_IDLE;
+	this->msgID= 0;
+	this->state= STATE_IDLE;
 
 	printf("init service on [:%d].\n", port);
 	this->port= port;
 
-	socklen_t clilen;
 	struct sockaddr_in serv_addr;
 		
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
@@ -230,14 +280,13 @@ void dfp_service::receive_thread(void)
 
         if(not_binded()){
         //no dest binded sockets receive only single packets
-            message.insert(message.end(), payload, payload + pckt->payload_length );
-            this->messageQueue.push({message, cli_addr} );
-            message.clear();
-            send_ACK(&cli_addr);
+			if(pckt->seqn==0 && pckt->payload_length < pckt->total_size){
+				printf("invalid multi-packet message. packet dropped.\n");
+				continue;
+			}
         }
 
 		switch(state){
-
 			case STATE_IDLE:
 				printf("STATE IDLE.\n");
 				if(pckt->seqn == 0){
@@ -247,15 +296,17 @@ void dfp_service::receive_thread(void)
                     message.insert(message.end(), payload, payload + pckt->payload_length);
 					printf("idle: appended %ld bytes.\n", message.size());
 
-
-					send_ACK();
+					send_ACK(&cli_addr);
 
 					if(pckt->total_size <= pckt->seqn + pckt->payload_length){
-						printf("idle: transmission completed.\n");
-						printf("total_size: %u. received: %u", pckt->total_size, pckt->seqn+ pckt->payload_length);
-						this->messageQueue.push({message, cli_addr});
-						message.clear();
+						printf("idle: transmission completed, recvd: [%u/%u]\n", pckt->total_size, pckt->seqn+ pckt->payload_length);
 						state= STATE_IDLE;
+
+						pthread_mutex_lock(&msgQueue_mutex);
+						this->messageQueue.push({message, cli_addr});
+						pthread_mutex_unlock(&msgQueue_mutex);
+
+						message.clear();
 
 					}else{
 						state= STATE_RECEIVING;
@@ -289,9 +340,13 @@ void dfp_service::receive_thread(void)
 
 					if(pckt->total_size <= pckt->seqn + pckt->payload_length){
 						printf("receiving: transmission completed.\n");
-						this->messageQueue.push({message, cli_addr});
-						message.clear();
 						state= STATE_IDLE;
+						
+						pthread_mutex_lock(&msgQueue_mutex);
+						this->messageQueue.push({message, cli_addr});
+						pthread_mutex_unlock(&msgQueue_mutex);
+
+						message.clear();
 					}
 				}
 		}
@@ -303,19 +358,19 @@ void dfp_service::send_ACK(void)
 {
     send_ACK(this->dest_addr);
 }
-
 void dfp_service::send_ACK(struct sockaddr_in* dest_addr)
 {
 	uint8_t ACK_buffer[PACKET_HEADER_SIZE]; 
 	packet* pckt= (packet*)ACK_buffer;
 
-	memcpy(ACK_buffer, buf, PACKET_HEADER_SIZE);
+	memcpy(ACK_buffer, this->buf, PACKET_HEADER_SIZE);
     
     pckt->type = PACKET_TYPE_ACK;
     pckt->total_size= 0;//PACKET_HEADER_SIZE;
     pckt->payload_length= 0;
     
     if(dest_addr!=NULL){
+		printf("send_ACK.\n");
         n= sendto(sockfd, ACK_buffer, PACKET_HEADER_SIZE,0, (const struct sockaddr *)dest_addr, sizeof(sockaddr_in));
 		if (n < 0) 
 			printf("ERROR sendto");
@@ -326,4 +381,5 @@ void* recv_thread(void*arg)
 {
 	dfp_service * dfp_inst= (dfp_service*)arg;
     dfp_inst->receive_thread();
+	pthread_exit(0);
 }
