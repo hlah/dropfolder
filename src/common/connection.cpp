@@ -8,6 +8,8 @@
 #include <poll.h>
 #include <unistd.h>
 
+#include <iostream>
+
 Connection Connection::connect(const std::string& hostname, int port, int timelimit) {
     int socketfd = build_socket();
     auto host = get_host( hostname );
@@ -44,7 +46,7 @@ Connection Connection::connect(const std::string& hostname, int port, int timeli
         throw_errno("Could not send Ack packet");
     }
 
-    return Connection{socketfd};
+    return Connection{socketfd, addr};
 }
 
 Connection Connection::listen(int port, int min_range, int max_range, int timelimit) {
@@ -64,7 +66,7 @@ Connection Connection::listen(int port, int min_range, int max_range, int timeli
 
     Packet packet;
     sockaddr_in client_addr;
-    socklen_t client_addr_size;
+    socklen_t client_addr_size = sizeof(sockaddr_in);
     if( recvfrom( socketfd, &packet, sizeof(Packet), 0, (sockaddr*)&client_addr, &client_addr_size ) == -1) {
         throw_errno("Could not reveive connection");
     }
@@ -76,9 +78,9 @@ Connection Connection::listen(int port, int min_range, int max_range, int timeli
 
     
     // create new socket for connection maintenance
-    socketfd = build_socket();
     int current_port = min_range;
     while( current_port <= max_range ) {
+        socketfd = build_socket();
         server_addr.sin_family = AF_INET;
         server_addr.sin_port = htons(current_port);
         server_addr.sin_addr.s_addr = INADDR_ANY;
@@ -86,8 +88,12 @@ Connection Connection::listen(int port, int min_range, int max_range, int timeli
 
         if( bind( socketfd, (sockaddr*)&server_addr, sizeof(server_addr) ) == 0 ) {
             break;
-        }
+        } 
+
+        close(socketfd);
+        current_port++;
     }
+
 
     if( current_port > max_range ) {
         throw_errno("Could not bind socket");
@@ -106,9 +112,15 @@ Connection Connection::listen(int port, int min_range, int max_range, int timeli
         throw ConnectionException{ "Unexpected packet" };
     }
 
-    return Connection{socketfd};
+    return Connection{socketfd, client_addr};
 }
 
+Connection::~Connection() {
+    close(_socket_fd);
+}
+
+
+/// Private functions
 
 void Connection::throw_errno( const std::string& str ) {
     throw ConnectionException{ str + std::string{": "} + strerror( errno ) };

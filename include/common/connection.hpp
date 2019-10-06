@@ -15,13 +15,23 @@ class Connection {
         static Connection connect(const std::string&, int port, int timelimit=5000);
         // wait for a connection
         static Connection listen(int port, int min_range=10000, int max_range=40000, int timelimit=5000);
+
         // receive data (non blocking);
         ReceivedData receive();
         // send data (blocking)
         void send(std::unique_ptr<void*> data, size_t size);
+
+        // return remote port
+        int port() const { return ntohs(_other.sin_port); }
+
+
+        // Destrouctor
+        ~Connection();
     private:
-        Connection(int socket_fd) : _socket_fd{socket_fd} {}
-        int _socket_fd{0};
+        Connection(int socket_fd, sockaddr_in other) 
+            : _socket_fd{socket_fd}, _other{other} {}
+        int _socket_fd;
+        sockaddr_in _other;
 
         // packet type enum
         enum class PacketType : uint8_t {
