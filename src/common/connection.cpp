@@ -50,7 +50,7 @@ Connection Connection::connect(const std::string& hostname, int port, int timeli
         throw_errno("Could not send Ack packet");
     }
 
-    return Connection{socketfd, addr};
+    return std::move(Connection{socketfd, addr});
 }
 
 Connection Connection::listen(int port, int min_range, int max_range, int timelimit) {
@@ -208,7 +208,14 @@ void Connection::send(uint8_t* data, size_t size) {
 }
 
 Connection::~Connection() {
-    close(_socket_fd);
+    if(_socket_fd != 0) {
+        close(_socket_fd);
+    }
+}
+
+
+Connection::Connection( Connection&& conn ) noexcept : _socket_fd{conn._socket_fd}, _other{conn._other}{
+    conn._socket_fd = 0;
 }
 
 

@@ -32,10 +32,15 @@ class Connection {
 
         // Destrouctor
         ~Connection();
+        // move constructor
+        Connection( Connection&& conn ) noexcept;
+
     private:
         Connection(int socket_fd, sockaddr_in other) 
             : _socket_fd{socket_fd}, _other{other} {}
         int _socket_fd;
+        Connection( const Connection& other ) = delete;
+        Connection& operator=( const Connection& other ) = delete;
         sockaddr_in _other;
 
         // packet type enum
