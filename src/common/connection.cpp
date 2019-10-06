@@ -8,7 +8,9 @@
 #include <poll.h>
 #include <unistd.h>
 
-#include <iostream>
+#include <vector>
+
+#define PAYLOAD_LEN 1024
 
 Connection Connection::connect(const std::string& hostname, int port, int timelimit) {
     int socketfd = build_socket();
@@ -25,7 +27,9 @@ Connection Connection::connect(const std::string& hostname, int port, int timeli
         throw_errno("Could not send Conn packet");
     }
 
-    poll_socket( socketfd, timelimit );
+    if( !poll_socket( socketfd, timelimit ) ) {
+        throw ConnectionException{ "Connection timed out." };
+    }
 
     if(recvfrom( socketfd, &packet, sizeof(Packet), 0, nullptr, nullptr ) == -1) {
         throw_errno("Could not reveive");
@@ -62,7 +66,9 @@ Connection Connection::listen(int port, int min_range, int max_range, int timeli
         throw_errno("Could not bind socket");
     }
 
-    poll_socket( socketfd, -1 );
+    if( !poll_socket( socketfd, -1 ) ) {
+        throw ConnectionException{ "Connection timed out." };
+    }
 
     Packet packet;
     sockaddr_in client_addr;
@@ -104,7 +110,9 @@ Connection Connection::listen(int port, int min_range, int max_range, int timeli
         throw_errno("Could not send packet");
     }
 
-    poll_socket( socketfd, timelimit );
+    if( !poll_socket( socketfd, timelimit ) ) {
+        throw ConnectionException{ "Connection timed out." };
+    }
     if(recvfrom( socketfd, &packet, sizeof(Packet), 0, (sockaddr*)&client_addr, &client_addr_size ) == -1) {
         throw_errno("Could not receive ack");
     }
@@ -113,6 +121,90 @@ Connection Connection::listen(int port, int min_range, int max_range, int timeli
     }
 
     return Connection{socketfd, client_addr};
+}
+
+ReceivedData Connection::receive() {
+    if( poll_socket( _socket_fd, 0 ) ) {
+        Packet* packet = (Packet*)new char[sizeof(Packet) + PAYLOAD_LEN];
+
+        // get first packet
+        socklen_t other_addr_size = sizeof(sockaddr_in);
+        if(recvfrom( _socket_fd, packet, sizeof(Packet) + PAYLOAD_LEN, 0, (sockaddr*)&_other, &other_addr_size ) == -1) {
+            throw_errno("Could not receive first packet");
+        }
+
+
+        size_t count = 1;
+        size_t data_size = 0;
+        size_t total = packet->total;
+
+
+        // allocate buffer and bitset
+        std::vector<bool> received( total, false );
+        std::unique_ptr<uint8_t[]> data{ new uint8_t[total*PAYLOAD_LEN] };
+
+        if( packet->type != PacketType::Data ) {
+            throw ConnectionException{ "Unexpected packet" };
+        }
+        if( packet->payload_length < PAYLOAD_LEN && packet->seqn != total-1 ) {
+            throw ConnectionException{ "Non last packet with less than total payload length" };
+        }
+        memcpy( &data[packet->seqn*PAYLOAD_LEN], &packet->data, packet->payload_length );
+        received[packet->seqn] = true;
+        data_size += packet->payload_length;
+
+        // get remaining packets
+        while( count < total ) {
+            poll_socket( _socket_fd, -1 );
+            if(recvfrom( _socket_fd, packet, sizeof(Packet) + PAYLOAD_LEN, 0, (sockaddr*)&_other, &other_addr_size ) == -1) {
+                throw_errno("Could not receive data");
+            }
+            if( packet->type != PacketType::Data ) {
+                throw ConnectionException{ "Unexpected packet" };
+            }
+            if( packet->payload_length < PAYLOAD_LEN && packet->seqn != total-1 ) {
+                throw ConnectionException{ "Non last packet with less than total payload length" };
+            }
+            if( !received[packet->seqn] ) {
+                count++;
+                memcpy( &data[packet->seqn*PAYLOAD_LEN], &packet->data, packet->payload_length );
+                received[packet->seqn] = true;
+                data_size += packet->payload_length;
+            }
+        }
+        return ReceivedData{ std::move(data), data_size };
+    } else {
+        return ReceivedData{};
+    }
+}
+
+void Connection::send(uint8_t* data, size_t size) {
+    size_t count = 0;
+    uint32_t total = (uint32_t)((size+PAYLOAD_LEN) / PAYLOAD_LEN);
+
+    Packet* packet = (Packet*)new char[sizeof(Packet) + PAYLOAD_LEN];
+    packet->type = PacketType::Data;
+    packet->msg_id = 0;
+    packet->seqn = 0;
+    packet->total = total;
+
+    while( count < total ) {
+        if( count < total-1 ) {
+            packet->payload_length = PAYLOAD_LEN;
+        } else {
+            packet->payload_length = size;
+        }
+
+        memcpy( &packet->data, &data[packet->seqn*PAYLOAD_LEN], packet->payload_length );
+
+        if( sendto( _socket_fd, (const void*)packet, sizeof(Packet)+packet->payload_length, 0, (sockaddr*)&_other, sizeof(sockaddr_in) ) == -1) {
+            throw_errno("Could not send Ack packet");
+        }
+
+        packet->seqn++;
+        count+=1;
+        size -= PAYLOAD_LEN;
+    }
 }
 
 Connection::~Connection() {
@@ -142,7 +234,7 @@ hostent* Connection::get_host(const std::string& hostname) {
     return host;
 }
 
-void Connection::poll_socket( int socketfd, int timelimit ) {
+bool Connection::poll_socket( int socketfd, int timelimit ) {
     pollfd pfd;
     pfd.fd = socketfd;
     pfd.events = POLLIN;
@@ -150,6 +242,8 @@ void Connection::poll_socket( int socketfd, int timelimit ) {
     if( response == -1 ) {
         throw_errno("Could not poll socket");
     } else if( response == 0 ) {
-        throw ConnectionException{ "Connection timed out." };
+        return false;
     }
+    return true;
 }
+

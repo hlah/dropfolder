@@ -5,8 +5,13 @@
 #include <memory>
 
 struct ReceivedData {
-    std::unique_ptr<void*> data;
+    std::unique_ptr<uint8_t[]> data;
     size_t length;
+
+    ReceivedData()
+        : data{}, length{0} {}
+    ReceivedData( std::unique_ptr<uint8_t[]>&& data, size_t length )
+        : data{std::move(data)}, length{length} {}
 };
 
 class Connection {
@@ -19,7 +24,7 @@ class Connection {
         // receive data (non blocking);
         ReceivedData receive();
         // send data (blocking)
-        void send(std::unique_ptr<void*> data, size_t size);
+        void send(uint8_t* data, size_t size);
 
         // return remote port
         int port() const { return ntohs(_other.sin_port); }
@@ -62,7 +67,7 @@ class Connection {
         // get host by name
         static hostent* get_host(const std::string& hostname);
         // poll socket for messages
-        static void poll_socket( int socketfd, int timelimit );
+        static bool poll_socket( int socketfd, int timelimit );
         
 
 };
