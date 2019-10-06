@@ -10,6 +10,8 @@
 
 #include <vector>
 
+#include <iostream>
+
 #define PAYLOAD_LEN 1024
 
 Connection Connection::connect(const std::string& hostname, int port, int timelimit) {
@@ -50,7 +52,7 @@ Connection Connection::connect(const std::string& hostname, int port, int timeli
         throw_errno("Could not send Ack packet");
     }
 
-    return std::move(Connection{socketfd, addr});
+    return std::move(Connection{socketfd, addr, timelimit});
 }
 
 Connection Connection::listen(int port, int min_range, int max_range, int timelimit) {
@@ -120,7 +122,7 @@ Connection Connection::listen(int port, int min_range, int max_range, int timeli
         throw ConnectionException{ "Unexpected packet" };
     }
 
-    return Connection{socketfd, client_addr};
+    return Connection{socketfd, client_addr, timelimit};
 }
 
 ReceivedData Connection::receive() {
@@ -153,6 +155,13 @@ ReceivedData Connection::receive() {
         received[packet->seqn] = true;
         data_size += packet->payload_length;
 
+        // send ack
+        packet->type = PacketType::Ack;
+        packet->payload_length = 0;
+        if( sendto( _socket_fd, (const void*)packet, sizeof(Packet), 0, (sockaddr*)&_other, sizeof(sockaddr_in) ) == -1) {
+            throw_errno("Could not send ack.");
+        }
+
         // get remaining packets
         while( count < total ) {
             poll_socket( _socket_fd, -1 );
@@ -171,6 +180,14 @@ ReceivedData Connection::receive() {
                 received[packet->seqn] = true;
                 data_size += packet->payload_length;
             }
+
+            // send ack
+            packet->type = PacketType::Ack;
+            packet->payload_length = 0;
+            if( sendto( _socket_fd, (const void*)packet, sizeof(Packet), 0, (sockaddr*)&_other, sizeof(sockaddr_in) ) == -1) {
+                throw_errno("Could not send ack.");
+            }
+
         }
         return ReceivedData{ std::move(data), data_size };
     } else {
@@ -184,10 +201,11 @@ void Connection::send(uint8_t* data, size_t size) {
 
     Packet* packet = (Packet*)new char[sizeof(Packet) + PAYLOAD_LEN];
     packet->type = PacketType::Data;
-    packet->msg_id = 0;
+    packet->msg_id = _next_msg_id++;
     packet->seqn = 0;
     packet->total = total;
 
+    int tries = 0;
     while( count < total ) {
         if( count < total-1 ) {
             packet->payload_length = PAYLOAD_LEN;
@@ -198,12 +216,33 @@ void Connection::send(uint8_t* data, size_t size) {
         memcpy( &packet->data, &data[packet->seqn*PAYLOAD_LEN], packet->payload_length );
 
         if( sendto( _socket_fd, (const void*)packet, sizeof(Packet)+packet->payload_length, 0, (sockaddr*)&_other, sizeof(sockaddr_in) ) == -1) {
-            throw_errno("Could not send Ack packet");
+            throw_errno("Could not send data packet");
         }
 
-        packet->seqn++;
-        count+=1;
-        size -= PAYLOAD_LEN;
+        // wait for ack
+        if( poll_socket( _socket_fd, _timelimit ) ) {
+            Packet ack_packet;
+            socklen_t other_addr_size = sizeof(sockaddr_in);
+            if(recvfrom( _socket_fd, &ack_packet, sizeof(Packet), 0, (sockaddr*)&_other, &other_addr_size ) == -1) {
+                throw_errno("Could not receive ack");
+            }
+
+            if( ack_packet.type != PacketType::Ack ) {
+                throw ConnectionException{"Received unexpected packet."};
+            }
+
+            // update counters
+            packet->seqn++;
+            count+=1;
+            size -= PAYLOAD_LEN;
+            tries = 0;
+        } else {
+            tries++;
+        }
+
+        if( tries == _trylimit-1 ) {
+            throw ConnectionException{"Connection timed out"};
+        }
     }
 }
 
@@ -214,7 +253,9 @@ Connection::~Connection() {
 }
 
 
-Connection::Connection( Connection&& conn ) noexcept : _socket_fd{conn._socket_fd}, _other{conn._other}{
+Connection::Connection( Connection&& conn ) noexcept 
+    : _socket_fd{conn._socket_fd}, _other{conn._other}, _timelimit{conn._timelimit}, _trylimit{conn._trylimit}
+{
     conn._socket_fd = 0;
 }
 

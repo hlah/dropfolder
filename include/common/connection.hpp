@@ -17,7 +17,7 @@ struct ReceivedData {
 class Connection {
     public:
         // try to connect to a server
-        static Connection connect(const std::string&, int port, int timelimit=5000);
+        static Connection connect(const std::string&, int port, int timelimit=1000);
         // wait for a connection
         static Connection listen(int port, int min_range=10000, int max_range=40000, int timelimit=5000);
 
@@ -36,12 +36,15 @@ class Connection {
         Connection( Connection&& conn ) noexcept;
 
     private:
-        Connection(int socket_fd, sockaddr_in other) 
-            : _socket_fd{socket_fd}, _other{other} {}
+        Connection(int socket_fd, sockaddr_in other, int timelimit, int trylimit=5) 
+            : _socket_fd{socket_fd}, _other{other}, _timelimit{timelimit}, _trylimit{trylimit} {}
         int _socket_fd;
+        uint16_t _next_msg_id = 0;
+        sockaddr_in _other;
+        int _timelimit;
+        int _trylimit;
         Connection( const Connection& other ) = delete;
         Connection& operator=( const Connection& other ) = delete;
-        sockaddr_in _other;
 
         // packet type enum
         enum class PacketType : uint8_t {
