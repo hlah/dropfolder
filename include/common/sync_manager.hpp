@@ -25,9 +25,11 @@ class SyncManager {
         /// Stop syncrionization
         void stop_sync();
     private:
-        std::thread _thread;
-        bool _stop;
-        Connection _conn;
+        SyncManager( const SyncManager& other ) = delete;
+        SyncManager& operator=( const SyncManager& other ) = delete;
+        std::shared_ptr<std::thread> _thread;
+        std::shared_ptr<bool> _stop;
+        std::shared_ptr<Connection> _conn;
 };
 
-#endif _DROPFOLDER_SYNC_MANAGER_
+#endif // _DROPFOLDER_SYNC_MANAGER_

@@ -14,7 +14,7 @@
 
 #define PAYLOAD_LEN 1024
 
-Connection Connection::connect(const std::string& hostname, int port, int timelimit) {
+std::shared_ptr<Connection> Connection::connect(const std::string& hostname, int port, int timelimit) {
     int socketfd = build_socket();
     auto host = get_host( hostname );
 
@@ -52,10 +52,10 @@ Connection Connection::connect(const std::string& hostname, int port, int timeli
         throw_errno("Could not send Ack packet");
     }
 
-    return std::move(Connection{socketfd, addr, timelimit});
+    return std::shared_ptr<Connection>{new Connection{socketfd, addr, timelimit}};
 }
 
-Connection Connection::listen(int port, int min_range, int max_range, int timelimit) {
+std::shared_ptr<Connection> Connection::listen(int port, int min_range, int max_range, int timelimit) {
     int socketfd = build_socket();
 
 	sockaddr_in server_addr;
@@ -122,7 +122,7 @@ Connection Connection::listen(int port, int min_range, int max_range, int timeli
         throw ConnectionException{ "Unexpected packet" };
     }
 
-    return Connection{socketfd, client_addr, timelimit};
+    return std::shared_ptr<Connection>{new Connection{socketfd, client_addr, timelimit}};
 }
 
 ReceivedData Connection::receive(int receive_timelimit) {
@@ -247,6 +247,7 @@ void Connection::send(uint8_t* data, size_t size) {
 }
 
 Connection::~Connection() {
+    std::cerr << "closing socket " << _socket_fd << std::endl;
     if(_socket_fd != 0) {
         close(_socket_fd);
     }
