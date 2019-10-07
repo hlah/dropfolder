@@ -22,7 +22,7 @@ class Connection {
         static Connection listen(int port, int min_range=10000, int max_range=40000, int timelimit=5000);
 
         // receive data (non blocking);
-        ReceivedData receive();
+        ReceivedData receive(int receive_timelimit = 0);
         // send data (blocking)
         void send(uint8_t* data, size_t size);
 
@@ -34,6 +34,7 @@ class Connection {
         ~Connection();
         // move constructor
         Connection( Connection&& conn ) noexcept;
+        Connection& operator=( Connection&& conn );
 
     private:
         Connection(int socket_fd, sockaddr_in other, int timelimit, int trylimit=5) 

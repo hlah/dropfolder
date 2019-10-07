@@ -125,8 +125,8 @@ Connection Connection::listen(int port, int min_range, int max_range, int timeli
     return Connection{socketfd, client_addr, timelimit};
 }
 
-ReceivedData Connection::receive() {
-    if( poll_socket( _socket_fd, 0 ) ) {
+ReceivedData Connection::receive(int receive_timelimit) {
+    if( poll_socket( _socket_fd, receive_timelimit ) ) {
         Packet* packet = (Packet*)new char[sizeof(Packet) + PAYLOAD_LEN];
 
         // get first packet
@@ -259,11 +259,21 @@ Connection::Connection( Connection&& conn ) noexcept
     conn._socket_fd = 0;
 }
 
+Connection& Connection::operator=( Connection&& conn ) {
+    close(_socket_fd);
+    _socket_fd = conn._socket_fd;
+    _other = conn._other;
+    _timelimit = conn._timelimit;
+    _trylimit = conn._trylimit;
+    conn._socket_fd = 0;
+    return *this;
+}
+
 
 /// Private functions
 
 void Connection::throw_errno( const std::string& str ) {
-    throw ConnectionException{ str + std::string{": "} + strerror( errno ) };
+    throw ConnectionException{ str + std::string{": "} + strerror( errno ) + std::string{" ("} + std::to_string(errno) + std::string{")"} };
 }
 
 int Connection::build_socket() {
@@ -294,4 +304,3 @@ bool Connection::poll_socket( int socketfd, int timelimit ) {
     }
     return true;
 }
-

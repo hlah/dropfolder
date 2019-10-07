@@ -5,12 +5,13 @@
 
 enum class MessageType {
     DELETE_FILE,
-    UPDATE_FILE
+    UPDATE_FILE,
+    USERNAME
 };
 
 struct Message {
     MessageType type;
-    char filename[MESSAGE_MAX_FILENAME_SIZE];
+    char filename[MESSAGE_MAX_FILENAME_SIZE]; // user name for USERNAME
     unsigned int file_length;
     char bytes[];
 };

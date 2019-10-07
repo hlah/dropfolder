@@ -26,6 +26,8 @@ file(GLOB_RECURSE CLIENT_SOURCE ${CMAKE_SOURCE_DIR}/src/client/*.cpp)
 add_executable(server ${COMMON_SOURCE} ${SERVER_SOURCE})
 add_executable(client ${COMMON_SOURCE} ${CLIENT_SOURCE})
 target_link_libraries(client ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(server ${CMAKE_THREAD_LIBS_INIT})
+message(STATUS ${CMAKE_THREAD_LIBS_INIT})
 
 
 # Include folders
@@ -37,4 +39,6 @@ target_include_directories(server PRIVATE ${CMAKE_SOURCE_DIR}/include/server)
 add_executable(watcher_test ${CMAKE_SOURCE_DIR}/tests/src/watcher_test.cpp ${COMMON_SOURCE})
 add_executable(client_test ${CMAKE_SOURCE_DIR}/tests/src/client_test.cpp ${COMMON_SOURCE})
 add_executable(server_test ${CMAKE_SOURCE_DIR}/tests/src/server_test.cpp ${COMMON_SOURCE})
+target_link_libraries(watcher_test ${CMAKE_THREAD_LIBS_INIT})
 target_link_libraries(server_test ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(client_test ${CMAKE_THREAD_LIBS_INIT})
