@@ -1,6 +1,5 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.10)
 project(Dropfolder)
-
 # compile flags for editor completion
 set( CMAKE_EXPORT_COMPILE_COMMANDS ON )
 
@@ -36,9 +35,9 @@ target_include_directories(client PRIVATE ${CMAKE_SOURCE_DIR}/include/client)
 target_include_directories(server PRIVATE ${CMAKE_SOURCE_DIR}/include/server)
 
 # Tests
-#add_executable(watcher_test ${CMAKE_SOURCE_DIR}/tests/src/watcher_test.cpp ${COMMON_SOURCE})
-#add_executable(client_test ${CMAKE_SOURCE_DIR}/tests/src/client_test.cpp ${COMMON_SOURCE})
-#add_executable(server_test ${CMAKE_SOURCE_DIR}/tests/src/server_test.cpp ${COMMON_SOURCE})
-#target_link_libraries(watcher_test ${CMAKE_THREAD_LIBS_INIT})
-#target_link_libraries(server_test ${CMAKE_THREAD_LIBS_INIT})
-#target_link_libraries(client_test ${CMAKE_THREAD_LIBS_INIT})
+add_executable(watcher_test ${CMAKE_SOURCE_DIR}/tests/src/watcher_test.cpp ${COMMON_SOURCE})
+add_executable(client_test ${CMAKE_SOURCE_DIR}/tests/src/client_test.cpp ${COMMON_SOURCE})
+add_executable(server_test ${CMAKE_SOURCE_DIR}/tests/src/server_test.cpp ${COMMON_SOURCE})
+target_link_libraries(watcher_test ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(server_test ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(client_test ${CMAKE_THREAD_LIBS_INIT})

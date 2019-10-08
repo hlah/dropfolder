@@ -8,19 +8,19 @@
 
 std::mutex m;
 
-void get_messages( std::vector<Connection>& conns );
+void get_messages( std::vector<std::shared_ptr<Connection>>& conns );
 
 int main() {
-    std::vector<Connection> conns;
+    std::vector<std::shared_ptr<Connection>> conns;
 
     std::thread msg_thread{ get_messages, std::ref(conns) };
 
     int conn_port = 10000;
     while(true) {
         auto conn = Connection::listen( 4001 , conn_port );
-        std::cout << "Connected to client (client port= " << conn.port() << ")\n";
+        std::cout << "Connected to client (client port= " << conn->port() << ")\n";
         m.lock();
-        conns.push_back( std::move(conn) );
+        conns.push_back( conn );
         m.unlock();
     }
 
@@ -29,11 +29,11 @@ int main() {
     return 0;
 }
 
-void get_messages( std::vector<Connection>& conns ) {
+void get_messages( std::vector<std::shared_ptr<Connection>>& conns ) {
     while(true) {
         m.lock();
         for( size_t i=0; i<conns.size(); i++ ) {
-            ReceivedData data = conns[i].receive();
+            ReceivedData data = conns[i]->receive();
             if( data.length > 0 ) {
                 std::cout << "Message from " << i << " : " << (const char*)data.data.get() << std::endl;
             } 
