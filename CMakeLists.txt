@@ -7,6 +7,7 @@ set( CMAKE_EXPORT_COMPILE_COMMANDS ON )
 set(warnings "-Wall -Wextra -Wno-error=unused-variable")
 set(CMAKE_CXX_FLAGS "-g ${warnings}")
 set(CMAKE_C_FLAGS "-g ${warnings}")
+set(CMAKE_CXX_STANDARD 11)
 
 # Find pthreads
 find_package(Threads)

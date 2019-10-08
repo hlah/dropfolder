@@ -4,6 +4,8 @@
 #include "common.hpp"
 #include "sync_manager.hpp"
 
+#include <fstream>
+
 void print_usage();
 
 int main(int argc, char** argv) {
@@ -42,7 +44,14 @@ int main(int argc, char** argv) {
             } else {
                 auto filename = words[1];
                 // TODO: fazer upload do arquivo
-                std::cerr << "Not implemented." << std::endl;
+                std::ifstream ifs{ filename, std::ios::binary };
+                if( ifs.fail() ) {
+                    std::cerr << "no such file" << std::endl;
+                } else {
+                    auto base = basename( filename );
+                    std::ofstream ofs{ std::string{"sync_dir/"} + base, std::ios::binary };
+                    ofs << ifs.rdbuf();
+                }
             }
         }
         // download command
