@@ -60,8 +60,15 @@ int main(int argc, char** argv) {
                 std::cerr << "No filename provided." << std::endl;
             } else {
                 auto filename = words[1];
-                // TODO: fazer download do arquivo
-                std::cerr << "Not implemented." << std::endl;
+                std::ifstream ifs{ std::string{"sync_dir/"} + filename, std::ios::binary };
+                if( ifs.fail() ) {
+                    std::cerr << "no such file" << std::endl;
+                } else {
+                    auto base = basename( filename );
+                    std::ofstream ofs{ std::string{"./"} + base, std::ios::binary };
+                    ofs << ifs.rdbuf();
+                }
+
             }
         }
         // delete command
