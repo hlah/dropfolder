@@ -76,18 +76,16 @@ int main(int argc, char** argv) {
         }
         // listar arquivos no servidor
         else if( words[0] == "list_server" ) {
-            // TODO: listar arquivos no servidor
-            std::cerr << "Not implemented." << std::endl;
+            std::cout << printdir( "sync_dir" );
         }
         // listar arquivos no cliente
         else if( words[0] == "list_client" ) {
-            // TODO: listar arquivos na pasta do cliente 
-            std::cerr << "Not implemented." << std::endl;
+            std::cout << printdir( "sync_dir" );
         }
         // criar diretório de sincronização
         else if( words[0] == "get_sync_dir" ) {
             // TODO: criar diretório de sincronização
-            std::cerr << "Not implemented." << std::endl;
+            std::cout << "sync_dir already exists" << std::endl;
         } 
         else {
             std::cerr << "Unknown command '" << words[0] << "'" << std::endl;
