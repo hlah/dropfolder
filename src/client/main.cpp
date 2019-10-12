@@ -28,6 +28,12 @@ int main(int argc, char** argv) {
         std::cout << "> " << std::flush;
         std::getline( std::cin, user_input );
         auto words = split( user_input );
+        // checa conexao:
+        if( !sync_manager.alive() ) {
+            std::cout << "Disconnected!" << std::endl;
+            quit = true;
+            continue;
+        }
         // nenhum comando digitado: ignora 
         if( !std::cin.eof() && words.size() == 0 ) {
             continue;

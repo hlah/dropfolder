@@ -15,6 +15,13 @@ int main(int argc, char** argv) {
     std::vector<SyncManager> conns;
     while( true ) {
         conns.emplace_back( port );
+        for( int i=0; i<conns.size(); i++ ) {
+            if( !conns[i].alive() ) {
+                std::cout << "Dropped connection: " << conns[i].status() << std::endl;
+                conns.erase( conns.begin() + i );
+                i--;
+            }
+        }
     }
 
     return 0;

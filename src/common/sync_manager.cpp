@@ -12,6 +12,7 @@
 void sync_thread( 
         std::shared_ptr<bool> stop, 
         std::shared_ptr<Connection> conn,
+        std::shared_ptr<std::string> status,
         std::string username
 );
 
@@ -24,39 +25,44 @@ SyncManager::SyncManager(
         const std::string& username,
         const std::string& sync_dir 
 ) : _conn{ Connection::connect( addr, port ) },
-    _stop{ new bool{false} }
+    _stop{ new bool{false} },
+    _status{ new std::string{"Ok"} }
 {
     _thread = std::shared_ptr<std::thread>{ new std::thread{ 
         sync_thread, 
         _stop,
         _conn,
+        _status,
         username,
     }};
+    _thread->detach();
 }
 
 SyncManager::SyncManager( int port ) 
     : _conn{ Connection::listen( port ) },
-      _stop{ new bool{false} }
+      _stop{ new bool{false} },
+      _status{ new std::string{"Ok"} }
 {
     _thread = std::shared_ptr<std::thread>{ new std::thread{ 
         sync_thread, 
         _stop,
         _conn,
+        _status,
         std::string{}
     }};
+    _thread->detach();
 }
 
 SyncManager::~SyncManager() {
-    std::cerr << "Sync manager going down" << std::endl;
-    if( _thread.unique() ) {
+    if( _stop.unique() ) {
         *_stop = true;
-        _thread->join();
     }
 }
 
 void sync_thread( 
         std::shared_ptr<bool> stop,
         std::shared_ptr<Connection> conn,
+        std::shared_ptr<std::string> status,
         std::string username
 ) {
     std::string sync_dir{};
@@ -97,21 +103,34 @@ void sync_thread(
         if( ignore_it != ignore.end() ) {
             ignore.erase( ignore_it );
         } else {
-            switch(event.type) {
-                case Watcher::EventType::MODIFIED:
-                case Watcher::EventType::CREATED:
-                    send_file( event.filename, sync_dir, conn );
-                    break;
-                case Watcher::EventType::REMOVED:
-                    delete_file( event.filename, conn );
-                    break;
-                default:
-                    break;
+            try {
+                switch(event.type) {
+                    case Watcher::EventType::MODIFIED:
+                    case Watcher::EventType::CREATED:
+                        send_file( event.filename, sync_dir, conn );
+                        break;
+                    case Watcher::EventType::REMOVED:
+                        delete_file( event.filename, conn );
+                        break;
+                    default:
+                        break;
+                }
+            } catch( std::exception& e ) {
+                *status = e.what();
+                *stop = true;
+                break;
             }
         }
 
         // TODO get messages from server
-        ReceivedData data = conn->receive();
+        ReceivedData data;
+        try {
+            data = conn->receive();
+        } catch( std::exception& e ) {
+            *status = e.what();
+            *stop = true;
+            break;
+        }
         while( data.length != 0 ) {
             Message* message = (Message*)data.data.get();
             std::string filepath{ sync_dir + std::string{"/"} + message->filename };
@@ -130,10 +149,16 @@ void sync_thread(
                     break;
             }
 
-            data = conn->receive();
+            try {
+                data = conn->receive();
+            } catch( std::exception& e ) {
+                *status = e.what();
+                *stop = true;
+                break;
+            }
         }
-
     }
+    std::cerr << "sync manager thread quitting\n";
 }
 
 void send_file( std::string filename, std::string sync_dir, std::shared_ptr<Connection> conn ) {

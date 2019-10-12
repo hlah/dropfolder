@@ -19,7 +19,7 @@ class Connection {
         // try to connect to a server
         static std::shared_ptr<Connection> connect(const std::string&, int port, int timelimit=1000);
         // wait for a connection
-        static std::shared_ptr<Connection> listen(int port, int min_range=10000, int max_range=40000, int timelimit=5000);
+        static std::shared_ptr<Connection> listen(int port, int min_range=10000, int max_range=40000, int timelimit=1000);
 
         // receive data (non blocking);
         ReceivedData receive(int receive_timelimit = 0);
