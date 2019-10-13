@@ -133,13 +133,15 @@ std::shared_ptr<Connection> Connection::listen(int port, int min_range, int max_
 
 //TODO: create a thread for receive
 ReceivedData Connection::receive(int receive_timelimit) {
+	if(receive_timelimit < 0){
+		while(recvQueue.empty());
+	}
     if(!recvQueue.empty()){
         pthread_mutex_lock(&recvQueueMutex);
             ReceivedData message {std::move(recvQueue.front().data), recvQueue.front().length };
-
             recvQueue.pop();
         pthread_mutex_unlock(&recvQueueMutex);
-        return message;
+        return {std::move(message.data), message.length};
     } else {
         return ReceivedData{};
     }
@@ -212,8 +214,8 @@ void Connection::send(uint8_t* data, size_t size) {
             Packet *ack_packet= ackQueue.front();
             ackQueue.pop();
             pthread_mutex_unlock(&ackQueueMutex);
-            delete [] ack_packet;
 
+			//printf("GOT ACK!\n");
             // update counters
             packet->seqn++;
             count+=1;
