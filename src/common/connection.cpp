@@ -151,22 +151,32 @@ ReceivedData Connection::receive(int receive_timelimit) {
 
 
 template<class T>
-int poll_queue(std::queue<T>* a_queue, pthread_cond_t* cond, pthread_mutex_t* mutex, int _timelimit)
+int Connection::poll_queue(std::queue<T>* a_queue, pthread_cond_t* cond, pthread_mutex_t* mutex, int _timelimit)
 {
     int               rc;
     struct timespec   ts;
     struct timeval    tp;
 
-    rc =  gettimeofday(&tp, NULL);
-    /* Convert from timeval to timespec */
-    ts.tv_sec  = tp.tv_sec;
-    ts.tv_nsec = tp.tv_usec * 1000;
-    ts.tv_sec += _timelimit;
 
     pthread_mutex_lock(mutex);
         while(a_queue->empty()){
-            if(pthread_cond_timedwait(cond, mutex, &ts)== ETIMEDOUT){
+			rc =  gettimeofday(&tp, NULL);
+			if(rc<0){
+				throw_errno("failed gettimeofdat");
+			}
+			/* Convert from timeval to timespec */
+			ts.tv_sec  = tp.tv_sec;
+			ts.tv_nsec = tp.tv_usec * 1000;
+			ts.tv_sec += _timelimit;
+
+			if(_timelimit < 0){
+				pthread_cond_wait(cond, mutex);
                 pthread_mutex_unlock(mutex);
+				return 1;
+
+			}else if(pthread_cond_timedwait(cond, mutex, &ts)== ETIMEDOUT){
+                pthread_mutex_unlock(mutex);
+				printf("poll queue timed out!\n");
                 return 0;
             }
         }
@@ -190,6 +200,7 @@ void Connection::send(uint8_t* data, size_t size) {
     //empties ackQueue
     pthread_mutex_lock(&ackQueueMutex);
     while(!ackQueue.empty()){
+		printf("packet remaining in queue!\n");
         ackQueue.pop();
     }
     pthread_mutex_unlock(&ackQueueMutex);
@@ -215,6 +226,9 @@ void Connection::send(uint8_t* data, size_t size) {
             ackQueue.pop();
             pthread_mutex_unlock(&ackQueueMutex);
 
+			if(ack_packet->seqn != packet->seqn){
+				printf("different ack packet[got %d, expected %d]\n", ack_packet->seqn, packet->seqn);
+			}
 			//printf("GOT ACK!\n");
             // update counters
             packet->seqn++;
@@ -222,6 +236,7 @@ void Connection::send(uint8_t* data, size_t size) {
             size -= PAYLOAD_LEN;
             tries = 0;
         } else {
+			printf("retransmit.\n");
             tries++;
         }
 
@@ -330,7 +345,7 @@ void Connection::receive_thread()
                 current_message_id= packet->msg_id;
 
                 // allocate buffer and bitset
-                received = {total, false };
+                received = std::vector<bool>(total, false);
                 data= std::unique_ptr<uint8_t[]>{ new uint8_t[total*PAYLOAD_LEN] };
 
                 if( packet->payload_length < PAYLOAD_LEN && packet->seqn != total-1 ) {
@@ -341,6 +356,7 @@ void Connection::receive_thread()
                 received[packet->seqn] = true;
                 data_size += packet->payload_length;
                 
+			//	printf("received seqno:%d/%d(count:%d)\n", packet->seqn, total-1, count);
                 sendAck(packet);
                 if( count < total ) {
                     state= recvState::RetrievingData;
@@ -373,6 +389,7 @@ void Connection::receive_thread()
                 }
 
                 sendAck(packet);
+				//printf("received seqno:%d/%d(count:%d)\n", packet->seqn, total-1, count);
 
                 if( count >= total ) {
                     state= recvState::Waiting;

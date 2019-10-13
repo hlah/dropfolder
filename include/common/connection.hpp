@@ -86,6 +86,8 @@ class Connection {
         Connection( const Connection& other ) = delete;
         Connection& operator=( const Connection& other ) = delete;
 
+		template<class T>
+		int poll_queue(std::queue<T>* a_queue, pthread_cond_t* cond, pthread_mutex_t* mutex, int _timelimit);
 
         // helper funciton to throw errors
         static void throw_errno( const std::string& str );
