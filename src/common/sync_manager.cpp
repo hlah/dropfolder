@@ -1,6 +1,7 @@
 #include "sync_manager.hpp"
 
 #include "message.hpp"
+#include "common.hpp"
 
 #include <fstream>
 #include <cstring>
@@ -71,11 +72,16 @@ void sync_thread(
     } else {
         // server mode, wait for client username
         ReceivedData data = conn->receive(-1);
-        // TODO check if is USERNAME messsage
+        // TODO check if is USERNAME messsage ??
         Message* msg = (Message*)data.data.get();
         username = std::string{msg->filename};
         sync_dir = username + "/sync_dir";
         mkdir(username.c_str(), 0777);
+        // send all files
+        for( const auto& filename : listdir( sync_dir ) ) {
+            send_file( filename, sync_dir, conn );
+        }
+
     }
 
     // create dir TODO check if already exits and if was sucessful
