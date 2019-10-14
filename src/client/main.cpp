@@ -3,10 +3,19 @@
 
 #include "common.hpp"
 #include "sync_manager.hpp"
+#include "message.hpp"
 
 #include <fstream>
+#include <cstring>
+#include <sys/stat.h>
 
 void print_usage();
+void upload_file( 
+        const std::string& filepath,
+        const std::string& username, 
+        const std::string& server_addr, 
+        int port 
+);
 
 int main(int argc, char** argv) {
     if( argc < 4 ) {
@@ -42,15 +51,11 @@ int main(int argc, char** argv) {
             if( words.size() < 2 ) {
                 std::cerr << "No filename provided." << std::endl;
             } else {
-                auto filename = words[1];
-                // TODO: fazer upload do arquivo
-                std::ifstream ifs{ filename, std::ios::binary };
-                if( ifs.fail() ) {
-                    std::cerr << "no such file" << std::endl;
-                } else {
-                    auto base = basename( filename );
-                    std::ofstream ofs{ std::string{"sync_dir/"} + base, std::ios::binary };
-                    ofs << ifs.rdbuf();
+                auto filepath = words[1];
+                try {
+                    upload_file( filepath, username, server_addr, port );
+                } catch( std::exception& e ) {
+                    std::cout << "could not make upload: " << e.what() << std::endl;
                 }
             }
         }
@@ -104,4 +109,37 @@ void print_usage() {
         << "Usage:" << std::endl
         << "client <username> <server address> <port>" << std::endl
     ;
+}
+
+void upload_file( 
+        const std::string& filepath,
+        const std::string& username, 
+        const std::string& server_addr, 
+        int port 
+        ) {
+    auto conn = Connection::connect( server_addr, port );
+
+    // send username
+    Message username_msg{ MessageType::USERNAME };
+    std::strncpy( username_msg.filename, username.c_str(), MESSAGE_MAX_FILENAME_SIZE );
+    username_msg.file_length = 0;
+    conn->send( (uint8_t*)&username_msg, sizeof(Message) );
+
+    // open file
+    std::ifstream ifs{ filepath, std::ios::binary };
+    if( ifs.fail() ) {
+        std::cerr << "no such file" << std::endl;
+    } else {
+        struct stat s;
+        stat( filepath.c_str(), &s );
+        int length = s.st_size;
+        auto base = basename( filepath );
+
+        Message* file_msg = (Message*)new uint8_t[sizeof(Message) + length];
+        file_msg->type = MessageType::UPDATE_FILE;
+        std::strncpy( file_msg->filename, base.c_str(), MESSAGE_MAX_FILENAME_SIZE );
+        file_msg->file_length = length;
+        ifs.read( file_msg->bytes, length );
+        conn->send( (uint8_t*)file_msg, length+sizeof(Message) );
+    }
 }

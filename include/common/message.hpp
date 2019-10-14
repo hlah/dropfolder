@@ -6,7 +6,9 @@
 enum class MessageType {
     DELETE_FILE,
     UPDATE_FILE,
-    USERNAME
+    USERNAME,
+    REQUEST_FILE,
+    LIST_DIR
 };
 
 struct Message {
