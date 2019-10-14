@@ -12,8 +12,7 @@ class SyncManager {
         SyncManager( 
                 const std::string& addr, 
                 int port, 
-                const std::string& username,
-                const std::string& sync_dir 
+                const std::string& username
         );
 
         /// Start server syncroniztion

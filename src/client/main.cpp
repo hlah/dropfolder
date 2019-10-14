@@ -22,6 +22,12 @@ void download_file(
         const std::string& server_addr, 
         int port 
 );
+void list_server( 
+        const std::string& username, 
+        const std::string& server_addr, 
+        int port 
+);
+
 
 int main(int argc, char** argv) {
     if( argc < 4 ) {
@@ -34,7 +40,7 @@ int main(int argc, char** argv) {
     int port = std::atoi( argv[3] );
 
     // TODO: Conecta com o servidor e inicia sincronização 
-    SyncManager sync_manager{ server_addr, port, username, "./sync_dir" };
+    SyncManager sync_manager{ server_addr, port, username};
 
     bool quit = false;
     std::string user_input;
@@ -86,7 +92,7 @@ int main(int argc, char** argv) {
         }
         // listar arquivos no servidor
         else if( words[0] == "list_server" ) {
-            std::cout << printdir( "sync_dir" );
+            list_server( username, server_addr, port );
         }
         // listar arquivos no cliente
         else if( words[0] == "list_client" ) {
@@ -125,7 +131,7 @@ void upload_file(
     auto conn = Connection::connect( server_addr, port );
 
     // send username
-    Message username_msg{ MessageType::USERNAME };
+    Message username_msg{ MessageType::USERNAME_NOSYNC };
     std::strncpy( username_msg.filename, username.c_str(), MESSAGE_MAX_FILENAME_SIZE );
     username_msg.file_length = 0;
     conn->send( (uint8_t*)&username_msg, sizeof(Message) );
@@ -158,7 +164,7 @@ void download_file(
     auto conn = Connection::connect( server_addr, port );
 
     // send username
-    Message username_msg{ MessageType::USERNAME };
+    Message username_msg{ MessageType::USERNAME_NOSYNC };
     std::strncpy( username_msg.filename, username.c_str(), MESSAGE_MAX_FILENAME_SIZE );
     username_msg.file_length = 0;
     conn->send( (uint8_t*)&username_msg, sizeof(Message) );
@@ -182,6 +188,40 @@ void download_file(
             ofs.write( msg->bytes, msg->file_length );
             std::cout << "Dowloaded file: " << filename << std::endl;
         }
+    }
+
+
+}
+
+void list_server( 
+        const std::string& username, 
+        const std::string& server_addr, 
+        int port 
+        ) {
+    auto conn = Connection::connect( server_addr, port );
+
+    // send username
+    Message username_msg{ MessageType::USERNAME_NOSYNC };
+    std::strncpy( username_msg.filename, username.c_str(), MESSAGE_MAX_FILENAME_SIZE );
+    username_msg.file_length = 0;
+    conn->send( (uint8_t*)&username_msg, sizeof(Message) );
+
+    // request file list
+    Message request_msg{ MessageType::REQUEST_FILE_LIST };
+    request_msg.file_length = 0;
+    conn->send( (uint8_t*)&request_msg, sizeof(Message) );
+
+    // receive file
+    auto response = conn->receive( 5000 );
+    if( response.length == 0 ) {
+        std::cerr << "Could not get file list: timed out.\n";
+    } else {
+        Message* msg = (Message*)response.data.get();
+        if( msg->type == MessageType::FILE_LIST ) {
+            std::cout << "Server files:\n" << (const char *)msg->bytes << std::endl;
+        } else {
+            std::cerr << "Invalid response." << std::endl;
+        } 
     }
 
 

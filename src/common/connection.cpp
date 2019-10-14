@@ -147,8 +147,8 @@ ReceivedData Connection::receive(int receive_timelimit) {
 
     if(!recvQueue.empty()){
         pthread_mutex_lock(&recvQueueMutex);
-            ReceivedData message {std::move(recvQueue.front().data), recvQueue.front().length };
-            recvQueue.pop();
+        ReceivedData message {std::move(recvQueue.front().data), recvQueue.front().length };
+        recvQueue.pop();
         pthread_mutex_unlock(&recvQueueMutex);
         return {std::move(message.data), message.length};
     } else {
@@ -256,9 +256,9 @@ void Connection::send(uint8_t* data, size_t size) {
 }
 
 Connection::~Connection() {
-    std::cerr << "closing socket " << _socket_fd << std::endl;
     if(_socket_fd != 0) {
-        pthread_cancel(_recv_thread);
+        _quit_thread = true;
+        pthread_join(_recv_thread, nullptr);
         close(_socket_fd);
     }
 }
@@ -317,8 +317,11 @@ void Connection::receive_thread()
     std::unique_ptr<uint8_t[]> data;
 
     Packet* packet = (Packet*)new char[sizeof(Packet) + PAYLOAD_LEN];
-	while(1){
-        poll_socket( _socket_fd, -1 );
+	while(!_quit_thread){
+        if( !poll_socket( _socket_fd, 100 ) ) {
+            continue;
+        }
+
 
 		/* receive from socket */
         if(recvfrom( _socket_fd, packet, sizeof(Packet) + PAYLOAD_LEN, 0, (sockaddr*)&sender_addr, &sender_addr_len ) == -1) {

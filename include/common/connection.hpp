@@ -76,6 +76,7 @@ class Connection {
 		pthread_mutex_t ackQueueMutex;
 		pthread_mutex_t recvQueueMutex;
 		pthread_t _recv_thread;
+        bool _quit_thread=false;
 		std::queue<ReceivedData> recvQueue;
 		std::queue<Packet*> ackQueue;
 

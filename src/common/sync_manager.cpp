@@ -22,8 +22,7 @@ void delete_file( std::string filename, std::shared_ptr<Connection> conn );
 SyncManager::SyncManager( 
         const std::string& addr, 
         int port, 
-        const std::string& username,
-        const std::string& sync_dir 
+        const std::string& username
 ) : _conn{ Connection::connect( addr, port ) },
     _stop{ new bool{false} }
 {
@@ -72,14 +71,15 @@ void sync_thread(
     } else {
         // server mode, wait for client username
         ReceivedData data = conn->receive(-1);
-        // TODO check if is USERNAME messsage ??
         Message* msg = (Message*)data.data.get();
         username = std::string{msg->filename};
         sync_dir = username + "/sync_dir";
         mkdir(username.c_str(), 0777);
         // send all files
-        for( const auto& filename : listdir( sync_dir ) ) {
-            send_file( filename, sync_dir, conn );
+        if( msg->type == MessageType::USERNAME ) {
+            for( const auto& filename : listdir( sync_dir ) ) {
+                send_file( filename, sync_dir, conn );
+            }
         }
 
     }
@@ -139,6 +139,15 @@ void sync_thread(
                 case MessageType::REQUEST_FILE:
                     send_file( message->filename, sync_dir, conn );
                     break;
+                case MessageType::REQUEST_FILE_LIST:
+                    std::string list_str = printdir(sync_dir);
+                    Message* list_msg = (Message*) new uint8_t[sizeof(Message) + list_str.size() + 1];
+                    list_msg->type = MessageType::FILE_LIST;
+                    list_msg->file_length = list_str.size()+1;
+                    memcpy( list_msg->bytes, list_str.c_str(), list_msg->file_length+1 );
+                    conn->send( (uint8_t*)list_msg, sizeof(Message) + list_str.size()+1);
+                    break;
+
             }
 
             data = conn->receive();

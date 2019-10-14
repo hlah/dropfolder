@@ -7,14 +7,16 @@ enum class MessageType {
     DELETE_FILE,
     UPDATE_FILE,
     USERNAME,
+    USERNAME_NOSYNC,
     REQUEST_FILE,
     NO_SUCH_FILE,
-    LIST_DIR
+    REQUEST_FILE_LIST,
+    FILE_LIST
 };
 
 struct Message {
     MessageType type;
-    char filename[MESSAGE_MAX_FILENAME_SIZE]; // user name for USERNAME
+    char filename[MESSAGE_MAX_FILENAME_SIZE]; // user name for USERNAME and USERNAME_NOSYNC
     unsigned int file_length;
     char bytes[];
 };
