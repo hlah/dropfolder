@@ -80,6 +80,7 @@ void sync_thread(
         username = std::string{msg->filename};
         sync_dir = username + "/sync_dir";
         mkdir(username.c_str(), 0777);
+        mkdir(sync_dir.c_str(), 0777);
         // send all files
         if( msg->type == MessageType::USERNAME ) {
             for( const auto& filename : listdir( sync_dir ) ) {
