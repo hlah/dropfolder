@@ -249,6 +249,7 @@ void Connection::send(uint8_t* data, size_t size) {
 Connection::~Connection() {
     std::cerr << "closing socket " << _socket_fd << std::endl;
     if(_socket_fd != 0) {
+        pthread_cancel(_recv_thread);
         close(_socket_fd);
     }
 }

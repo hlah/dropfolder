@@ -68,7 +68,7 @@ class Connection {
         };
 
         Connection(int socket_fd, sockaddr_in other, int timelimit, int trylimit=5);
-        int _socket_fd;
+        int _socket_fd = 0;
 
 		void sendAck(Packet* packet);
 
