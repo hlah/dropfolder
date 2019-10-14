@@ -13,11 +13,13 @@
 void sync_thread( 
         std::shared_ptr<bool> stop, 
         std::shared_ptr<Connection> conn,
-        std::string username
+        std::string username,
+        bool client_mode
 );
 
-void send_file( std::string filename, std::string sync_dir, std::shared_ptr<Connection> conn );
-void delete_file( std::string filename, std::shared_ptr<Connection> conn );
+void send_file( std::string filename, std::string sync_dir, std::shared_ptr<Connection> conn, bool client_mode );
+void delete_file( std::string filename, std::shared_ptr<Connection> conn, bool client_mode );
+void print_msg( const std::string& msg, bool client_mode );
 
 SyncManager::SyncManager( 
         const std::string& addr, 
@@ -31,6 +33,7 @@ SyncManager::SyncManager(
         _stop,
         _conn,
         username,
+        true,
     }};
 }
 
@@ -42,12 +45,12 @@ SyncManager::SyncManager( int port )
         sync_thread, 
         _stop,
         _conn,
-        std::string{}
+        std::string{},
+        false
     }};
 }
 
 SyncManager::~SyncManager() {
-    std::cerr << "Sync manager going down" << std::endl;
     if( _thread.unique() ) {
         *_stop = true;
         _thread->join();
@@ -57,7 +60,8 @@ SyncManager::~SyncManager() {
 void sync_thread( 
         std::shared_ptr<bool> stop,
         std::shared_ptr<Connection> conn,
-        std::string username
+        std::string username,
+        bool client_mode
 ) {
     std::string sync_dir{};
     if( username.size() > 0 ) {
@@ -68,6 +72,7 @@ void sync_thread(
         std::strcpy(msg.filename, username.c_str());
         msg.file_length = 0;
         conn->send( (uint8_t*)&msg, sizeof(Message) );
+        print_msg( std::string{"synching '"} + sync_dir + std::string{"'"}, client_mode );
     } else {
         // server mode, wait for client username
         ReceivedData data = conn->receive(-1);
@@ -78,8 +83,9 @@ void sync_thread(
         // send all files
         if( msg->type == MessageType::USERNAME ) {
             for( const auto& filename : listdir( sync_dir ) ) {
-                send_file( filename, sync_dir, conn );
+                send_file( filename, sync_dir, conn, client_mode );
             }
+            print_msg( std::string{"synching '"} + sync_dir + std::string{"'"}, client_mode );
         }
 
     }
@@ -90,7 +96,6 @@ void sync_thread(
     Watcher watcher;
     watcher.add_dir( sync_dir );
 
-    std::cout << "synching '" << sync_dir << "'" << std::endl;
 
     std::vector<std::string> ignore;
 
@@ -106,10 +111,10 @@ void sync_thread(
             switch(event.type) {
                 case Watcher::EventType::MODIFIED:
                 case Watcher::EventType::CREATED:
-                    send_file( event.filename, sync_dir, conn );
+                    send_file( event.filename, sync_dir, conn, client_mode );
                     break;
                 case Watcher::EventType::REMOVED:
-                    delete_file( event.filename, conn );
+                    delete_file( event.filename, conn, client_mode );
                     break;
                 default:
                     break;
@@ -123,21 +128,20 @@ void sync_thread(
             std::string filepath{ sync_dir + std::string{"/"} + message->filename };
             switch(message->type) {
                 case MessageType::DELETE_FILE:
-                    std::cout << "Deleted " << filepath << " localy." << std::endl;
+                    print_msg(std::string{"Deleted "} + filepath + std::string{" localy."}, client_mode);
                     std::remove( filepath.c_str() );
                     ignore.push_back( message->filename );
                     break;
                 case MessageType::UPDATE_FILE:
                     {
-                        std::cout << "Updated " << filepath << " localy." << std::endl;
                         std::ofstream ofs{ filepath.c_str(), std::ios::binary | std::ios::trunc };
-                        std::cerr << message->file_length << "bytes" << std::endl;
                         ofs.write( message->bytes, message->file_length );
                         ignore.push_back( message->filename );
+                        print_msg(std::string{"Updated "} + filepath + std::string{" localy. ("} + std::to_string(message->file_length) + std::string{" bytes)"}, client_mode);
                     }
                     break;
                 case MessageType::REQUEST_FILE:
-                    send_file( message->filename, sync_dir, conn );
+                    send_file( message->filename, sync_dir, conn, client_mode );
                     break;
                 case MessageType::REQUEST_FILE_LIST:
                     std::string list_str = printdir(sync_dir);
@@ -156,7 +160,7 @@ void sync_thread(
     }
 }
 
-void send_file( std::string filename, std::string sync_dir, std::shared_ptr<Connection> conn ) {
+void send_file( std::string filename, std::string sync_dir, std::shared_ptr<Connection> conn, bool client_mode ) {
     std::string filepath{ sync_dir + std::string{"/"} + filename};
     std::ifstream ifs{ filepath, std::ios::binary};
 
@@ -175,9 +179,7 @@ void send_file( std::string filename, std::string sync_dir, std::shared_ptr<Conn
         /// TODO send msg through connection
         conn->send( (uint8_t*)msg, length+sizeof(Message) );
 
-        std::cout << "\033[2D"; 
-        std::cerr << length << "bytes. ";
-        std::cout << "updated '" << msg->filename << "' remotely.\n> " << std::flush;
+        print_msg(std::string{"Updated "} + filename + std::string{" remotely. ("} + std::to_string(length) + std::string{" bytes)"}, client_mode);
 
         delete[] msg;
     } else {
@@ -188,7 +190,7 @@ void send_file( std::string filename, std::string sync_dir, std::shared_ptr<Conn
     }
 }
 
-void delete_file( std::string filename, std::shared_ptr<Connection> conn ) {
+void delete_file( std::string filename, std::shared_ptr<Connection> conn, bool client_mode ) {
     Message msg;
     msg.type = MessageType::DELETE_FILE;
     std::strncpy( msg.filename, filename.c_str(), MESSAGE_MAX_FILENAME_SIZE );
@@ -197,7 +199,15 @@ void delete_file( std::string filename, std::shared_ptr<Connection> conn ) {
     /// TODO send msg through connection
     conn->send( (uint8_t*)&msg, sizeof(Message) );
 
-    std::cout << "\033[80D"; 
-    std::cout << "deleted '" << filename << "' remotely.\n> " << std::flush;
+    print_msg( std::string{"deleted "} + filename + std::string{" remotely"}, client_mode );
 }
 
+void print_msg( const std::string& msg, bool client_mode ) {
+    if( client_mode ) {
+        std::cout << "\033[80D"; 
+    }
+    std::cout << msg << std::endl;
+    if( client_mode ) {
+        std::cout << "> " << std::flush;
+    }
+}
