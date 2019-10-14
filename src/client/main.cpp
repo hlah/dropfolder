@@ -16,6 +16,12 @@ void upload_file(
         const std::string& server_addr, 
         int port 
 );
+void download_file( 
+        const std::string& filename,
+        const std::string& username, 
+        const std::string& server_addr, 
+        int port 
+);
 
 int main(int argc, char** argv) {
     if( argc < 4 ) {
@@ -65,8 +71,7 @@ int main(int argc, char** argv) {
                 std::cerr << "No filename provided." << std::endl;
             } else {
                 auto filename = words[1];
-                // TODO: fazer download do arquivo
-                std::cerr << "Not implemented." << std::endl;
+                download_file( filename, username, server_addr, port );
             }
         }
         // delete command
@@ -142,4 +147,42 @@ void upload_file(
         ifs.read( file_msg->bytes, length );
         conn->send( (uint8_t*)file_msg, length+sizeof(Message) );
     }
+}
+
+void download_file( 
+        const std::string& filename,
+        const std::string& username, 
+        const std::string& server_addr, 
+        int port 
+        ) {
+    auto conn = Connection::connect( server_addr, port );
+
+    // send username
+    Message username_msg{ MessageType::USERNAME };
+    std::strncpy( username_msg.filename, username.c_str(), MESSAGE_MAX_FILENAME_SIZE );
+    username_msg.file_length = 0;
+    conn->send( (uint8_t*)&username_msg, sizeof(Message) );
+
+    // request file
+    Message request_msg{ MessageType::REQUEST_FILE };
+    std::strncpy( request_msg.filename, filename.c_str(), MESSAGE_MAX_FILENAME_SIZE );
+    request_msg.file_length = 0;
+    conn->send( (uint8_t*)&request_msg, sizeof(Message) );
+
+    // receive file
+    auto response = conn->receive( 5000 );
+    if( response.length == 0 ) {
+        std::cout << "Could not download file: timed out.\n";
+    } else {
+        Message* msg = (Message*)response.data.get();
+        if( msg->type == MessageType::NO_SUCH_FILE ) {
+            std::cout << "Could not download file: file does not exists." << std::endl;
+        } else {
+            std::ofstream ofs{ filename.c_str(), std::ios::binary | std::ios::trunc };
+            ofs.write( msg->bytes, msg->file_length );
+            std::cout << "Dowloaded file: " << filename << std::endl;
+        }
+    }
+
+
 }

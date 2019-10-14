@@ -9,6 +9,7 @@
 #include <poll.h>
 #include <unistd.h>
 #include <vector>
+#include <chrono>
 
 #include <iostream>
 
@@ -133,9 +134,17 @@ std::shared_ptr<Connection> Connection::listen(int port, int min_range, int max_
 
 //TODO: create a thread for receive
 ReceivedData Connection::receive(int receive_timelimit) {
-	if(receive_timelimit < 0){
-		while(recvQueue.empty());
-	}
+    // wait for message or timeout
+    auto prev = std::chrono::steady_clock::now();
+    while(recvQueue.empty() ) {
+        if( receive_timelimit >= 0 ) {
+            auto now = std::chrono::steady_clock::now();
+            if( now-prev > std::chrono::milliseconds{receive_timelimit} ) {
+                break;
+            }
+        }
+    }
+
     if(!recvQueue.empty()){
         pthread_mutex_lock(&recvQueueMutex);
             ReceivedData message {std::move(recvQueue.front().data), recvQueue.front().length };

@@ -8,6 +8,7 @@ enum class MessageType {
     UPDATE_FILE,
     USERNAME,
     REQUEST_FILE,
+    NO_SUCH_FILE,
     LIST_DIR
 };
 

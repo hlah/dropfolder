@@ -122,11 +122,16 @@ void sync_thread(
                     ignore.push_back( message->filename );
                     break;
                 case MessageType::UPDATE_FILE:
-                    std::cout << "Updated " << filepath << " localy." << std::endl;
-                    std::ofstream ofs{ filepath.c_str(), std::ios::binary | std::ios::trunc };
-                    std::cerr << message->file_length << "bytes" << std::endl;
-                    ofs.write( message->bytes, message->file_length );
-                    ignore.push_back( message->filename );
+                    {
+                        std::cout << "Updated " << filepath << " localy." << std::endl;
+                        std::ofstream ofs{ filepath.c_str(), std::ios::binary | std::ios::trunc };
+                        std::cerr << message->file_length << "bytes" << std::endl;
+                        ofs.write( message->bytes, message->file_length );
+                        ignore.push_back( message->filename );
+                    }
+                    break;
+                case MessageType::REQUEST_FILE:
+                    send_file( message->filename, sync_dir, conn );
                     break;
             }
 
@@ -140,25 +145,32 @@ void send_file( std::string filename, std::string sync_dir, std::shared_ptr<Conn
     std::string filepath{ sync_dir + std::string{"/"} + filename};
     std::ifstream ifs{ filepath, std::ios::binary};
 
-    struct stat s;
-    stat( filepath.c_str(), &s );
-    int length = s.st_size;
+    if( !ifs.fail() ) {
+        struct stat s;
+        stat( filepath.c_str(), &s );
+        int length = s.st_size;
 
-    Message* msg = (Message*)new char[length + sizeof(Message)];
-    msg->type = MessageType::UPDATE_FILE;
-    std::strncpy( msg->filename, filename.c_str(), MESSAGE_MAX_FILENAME_SIZE );
-    msg->file_length = length;
+        Message* msg = (Message*)new char[length + sizeof(Message)];
+        msg->type = MessageType::UPDATE_FILE;
+        std::strncpy( msg->filename, filename.c_str(), MESSAGE_MAX_FILENAME_SIZE );
+        msg->file_length = length;
 
-    ifs.read( msg->bytes, length );
+        ifs.read( msg->bytes, length );
 
-    /// TODO send msg through connection
-    conn->send( (uint8_t*)msg, length+sizeof(Message) );
+        /// TODO send msg through connection
+        conn->send( (uint8_t*)msg, length+sizeof(Message) );
 
-    std::cout << "\033[2D"; 
-    std::cerr << length << "bytes. ";
-    std::cout << "updated '" << msg->filename << "' remotely.\n> " << std::flush;
+        std::cout << "\033[2D"; 
+        std::cerr << length << "bytes. ";
+        std::cout << "updated '" << msg->filename << "' remotely.\n> " << std::flush;
 
-    delete[] msg;
+        delete[] msg;
+    } else {
+        Message msg{MessageType::NO_SUCH_FILE};
+        std::strncpy( msg.filename, filename.c_str(), MESSAGE_MAX_FILENAME_SIZE );
+        msg.file_length = 0;
+        conn->send( (uint8_t*)&msg, sizeof(Message) );
+    }
 }
 
 void delete_file( std::string filename, std::shared_ptr<Connection> conn ) {
