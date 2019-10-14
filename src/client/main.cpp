@@ -27,6 +27,12 @@ void list_server(
         const std::string& server_addr, 
         int port 
 );
+void delete_file( 
+        const std::string& filename,
+        const std::string& username, 
+        const std::string& server_addr, 
+        int port 
+);
 
 
 int main(int argc, char** argv) {
@@ -86,8 +92,7 @@ int main(int argc, char** argv) {
                 std::cerr << "No filename provided." << std::endl;
             } else {
                 auto filename = words[1];
-                // TODO: deletar arquivo
-                std::cerr << "Not implemented." << std::endl;
+                delete_file( filename, username, server_addr, port );
             }
         }
         // listar arquivos no servidor
@@ -223,6 +228,27 @@ void list_server(
             std::cerr << "Invalid response." << std::endl;
         } 
     }
+}
+
+void delete_file( 
+        const std::string& filename,
+        const std::string& username, 
+        const std::string& server_addr, 
+        int port 
+        ) {
+    auto conn = Connection::connect( server_addr, port );
+
+    // send username
+    Message username_msg{ MessageType::USERNAME_NOSYNC };
+    std::strncpy( username_msg.filename, username.c_str(), MESSAGE_MAX_FILENAME_SIZE );
+    username_msg.file_length = 0;
+    conn->send( (uint8_t*)&username_msg, sizeof(Message) );
+
+    // request file deletion
+    Message delete_msg{ MessageType::DELETE_FILE };
+    std::strncpy( delete_msg.filename, filename.c_str(), MESSAGE_MAX_FILENAME_SIZE );
+    delete_msg.file_length = 0;
+    conn->send( (uint8_t*)&delete_msg, sizeof(Message) );
 
 
 }
