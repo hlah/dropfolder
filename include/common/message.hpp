@@ -11,7 +11,8 @@ enum class MessageType {
     REQUEST_FILE,
     NO_SUCH_FILE,
     REQUEST_FILE_LIST,
-    FILE_LIST
+    FILE_LIST,
+    DROP
 };
 
 struct Message {

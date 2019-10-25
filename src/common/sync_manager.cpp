@@ -100,6 +100,7 @@ void sync_thread(
 
     std::vector<std::string> ignore;
 
+    bool dropped = false;
     while( !*stop ) {
         // check for sync dir modification
         auto event = watcher.next();
@@ -145,19 +146,28 @@ void sync_thread(
                     send_file( message->filename, sync_dir, conn, client_mode );
                     break;
                 case MessageType::REQUEST_FILE_LIST:
-                    std::string list_str = printdir(sync_dir);
-                    Message* list_msg = (Message*) new uint8_t[sizeof(Message) + list_str.size() + 1];
-                    list_msg->type = MessageType::FILE_LIST;
-                    list_msg->file_length = list_str.size()+1;
-                    memcpy( list_msg->bytes, list_str.c_str(), list_msg->file_length+1 );
-                    conn->send( (uint8_t*)list_msg, sizeof(Message) + list_str.size()+1);
+                    {
+                        std::string list_str = printdir(sync_dir);
+                        Message* list_msg = (Message*) new uint8_t[sizeof(Message) + list_str.size() + 1];
+                        list_msg->type = MessageType::FILE_LIST;
+                        list_msg->file_length = list_str.size()+1;
+                        memcpy( list_msg->bytes, list_str.c_str(), list_msg->file_length+1 );
+                        conn->send( (uint8_t*)list_msg, sizeof(Message) + list_str.size()+1);
+                    }
                     break;
-
+                case MessageType::DROP:
+                    dropped = true;
+                    *stop = true;
+                    break;
             }
 
             data = conn->receive();
         }
+    }
 
+    if( !dropped ) {
+        Message drop_msg{ MessageType::DROP, "", 0 };
+        conn->send( (uint8_t*)&drop_msg, sizeof(Message) );
     }
 }
 

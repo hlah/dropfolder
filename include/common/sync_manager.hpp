@@ -20,6 +20,9 @@ class SyncManager {
         SyncManager( SyncManager&& other ) = default;
 
         ~SyncManager();
+
+        /// Is synchroinzation alive?
+        bool alive() const { return !*_stop; }
         
         /// Stop syncrionization
         void stop_sync();
@@ -29,6 +32,7 @@ class SyncManager {
         std::shared_ptr<std::thread> _thread;
         std::shared_ptr<bool> _stop;
         std::shared_ptr<Connection> _conn;
+
 };
 
 #endif // _DROPFOLDER_SYNC_MANAGER_
