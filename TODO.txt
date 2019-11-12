@@ -1,0 +1,27 @@
+1 - Implementar Watcher para ver eventos em subdiretórios 
+2 - Sync manager espera por replicas antes de atualizar arquivos. (usar barreira ou semáforo);
+3 - Métodos para obter informações sobre conexão no SyncManager;
+4 - Modifcar SyncManager para fazer atualização incial usando arquivo zip;
+- Réplicas:
+    6 - SyncManager ouvindo (watcher) todos usuários para cada réplica conectada no primário
+    7 - thread de aceitação de novos replicadores (primário)
+    8 - thread de i'm alive enviando informações de clientes e réplicas (primário)
+    9 - thread de detecção de falhas do primário (réplicas)
+
+10 - Implementar algoritmo de eleição (disparado pelo thread detector de falhas)
+   11 - Após eleição, enviar mensagem de troca de primário para clientes (pelo connection)
+
+12 - Implementar recirecionamento de conexão no Connection
+13 - Novo construtor de SyncManager recebendo conexão já pronta. (utilizado por novo primário)
+
+
+1 3 13 4 12 
+6 7 8 9
+10 11
+2
+
+
+Mateus: 1,4
+Ricardo: 12,7-9,11
+Trivial: 3,13,6
+A ver: 10 2
