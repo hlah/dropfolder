@@ -30,8 +30,10 @@ class Connection {
         void send(uint8_t* data, size_t size);
 
         // return remote port
-        int port() const { return ntohs(_other.sin_port); }
+        uint16_t port() const { return ntohs(_other.sin_port); }
 
+		//return remote IP
+		uint32_t remoteIP() const { return ntohl(_other.sin_addr.s_addr); }
 
         // Destrouctor
         ~Connection();

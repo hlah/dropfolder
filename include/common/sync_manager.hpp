@@ -26,7 +26,17 @@ class SyncManager {
         
         /// Stop syncrionization
         void stop_sync();
+
+		///get sync infos
+		uint32_t getSyncPeerIP() { return _conn->remoteIP();}
+		uint16_t getSyncPeerPort() { return _conn->port();}
+	   //TODO: how to get username?? 
+	   //      it's discovered after, at sync_thread function, not inside class SyncManager
+		std::string getUsername() { return std::string{"DUMMY_USERNAME"};}
     private:
+		std::string username;
+		
+
         SyncManager( const SyncManager& other ) = delete;
         SyncManager& operator=( const SyncManager& other ) = delete;
         std::shared_ptr<std::thread> _thread;

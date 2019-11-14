@@ -3,7 +3,7 @@
 ---------------------------------------------------------------------------------------------------------------------
 |        |   1 - Implementar Watcher para ver eventos em subdiretórios                                              |
 |        |   2 - Sync manager espera por replicas antes de atualizar arquivos. (usar barreira ou semáforo);         |
-|        |   3 - Métodos para obter informações sobre conexão no SyncManager;                                       |
+|  50%   |   3 - Métodos para obter informações sobre conexão no SyncManager;                                       |
 |        |   4 - Modifcar SyncManager para fazer atualização incial usando arquivo zip;                             |
 |        |   - Réplicas:                                                                                            |
 |        |       6 - SyncManager ouvindo (watcher) todos usuários para cada réplica conectada no primário           |
