@@ -8,7 +8,7 @@
 
 class SyncManager {
     public:
-        /// Start client syncrionization
+        /// Start client syncronization
         SyncManager( 
                 const std::string& addr, 
                 int port, 
@@ -28,14 +28,20 @@ class SyncManager {
         void stop_sync();
 
 		///get sync infos
-		uint32_t getSyncPeerIP() { return _conn->remoteIP();}
-		uint16_t getSyncPeerPort() { return _conn->port();}
+		uint32_t getPeerIP() { return _conn->remoteIP();}
+		uint16_t getPeerPort() { return _conn->port();}
 	   //TODO: how to get username?? 
 	   //      it's discovered after, at sync_thread function, not inside class SyncManager
-		std::string getUsername() { return std::string{"DUMMY_USERNAME"};}
+		std::string getUsername() { return username;}
+
+		void syncThread(void);
     private:
+		std::string sync_dir;
 		std::string username;
-		
+		bool client_mode;	
+
+		void send_file(std::string filename);
+		void delete_file( std::string filename);
 
         SyncManager( const SyncManager& other ) = delete;
         SyncManager& operator=( const SyncManager& other ) = delete;

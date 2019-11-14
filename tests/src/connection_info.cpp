@@ -41,8 +41,8 @@ void addr_thread()
 		conn_mutex_g.lock();
 		for( const auto& conn : conns_g) {
 			std::cout << conn->getUsername() << " syncAddr: [" 
-					  << conn->getSyncPeerIP() << ":"
-					  << conn->getSyncPeerPort() << "]\n";
+					  << conn->getPeerIP() << ":"
+					  << conn->getPeerPort() << "]\n";
 		}
 		conn_mutex_g.unlock();
 		std::cout << std::endl;
