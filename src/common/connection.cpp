@@ -2,6 +2,8 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <sys/time.h>
 #include <netinet/in.h>
 #include <strings.h>
@@ -328,9 +330,18 @@ void Connection::receive_thread()
 			throw_errno("Could not receive ack");
         }
 
-        if(sender_addr.sin_addr.s_addr !=  _other.sin_addr.s_addr ||
+
+		if(packet->type == PacketType::ChangeServerAddr){
+            char str[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &(sender_addr.sin_addr), str, INET_ADDRSTRLEN);
+            std::cout << "changed server_addr to " << str << ":" << ntohs(sender_addr.sin_port) << std::endl;
+            _other.sin_addr.s_addr= sender_addr.sin_addr.s_addr;
+            _other.sin_port= sender_addr.sin_port;
+            sendAck(packet);
+            continue;
+
+		}else if(sender_addr.sin_addr.s_addr !=  _other.sin_addr.s_addr ||
            sender_addr.sin_port != _other.sin_port){
-            //unexpected addr
             continue;
         }
 

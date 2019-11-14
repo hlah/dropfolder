@@ -46,7 +46,8 @@ class Connection {
             Data,
             Ack,
             NewPort,
-            Conn
+            Conn,
+			ChangeServerAddr
         };
 
 		enum class recvState : uint8_t {

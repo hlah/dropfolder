@@ -1,7 +1,10 @@
+#if 0
 #include <thread>             // std::thread
 #include <chrono>             // std::chrono::seconds
 #include <mutex>              // std::mutex, std::unique_lock
 #include <condition_variable> // std::condition_variable, std::cv_status
+#include <vector>
+#include "sync_manager.hpp"
 
 class ReplicationManager
 {
@@ -10,6 +13,7 @@ class ReplicationManager
 	std::vector<std::unique_ptr<SyncManager>> RM_group;
 	std::condition_variable failure_detection_cv;
     std::mutex failure_detection_mutex;
+	ReplicationManager();
 
 	bool gotPrimaryRMMessage;
 
@@ -17,7 +21,7 @@ class ReplicationManager
 	void failure_detection_thread();
 	void RMAddToGroup_thread();
 
-	static int FailureDetectionTimeout = 6;
+	const static int FailureDetectionTimeout = 6;
 };
 
 void ImAlive_thread_starter(ReplicationManager *rm);
@@ -87,4 +91,4 @@ void ReplicationManager::ImAlive_thread()
 		sleep(2);
 	}
 }
-
+#endif
