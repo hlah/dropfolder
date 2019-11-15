@@ -4,58 +4,44 @@
 #include <vector>
 #include <mutex>
 #include <chrono>
-
-std::vector<std::unique_ptr<SyncManager>> conns_g;
-std::mutex conn_mutex_g;
+#include "replication_server.hpp"
 
 void print_usage();
-void accept_thread(int port);
-void clean_thread();
 
 int main(int argc, char** argv) {
-    if( argc < 2 ) {
+    if( argc < 3 ) {
         print_usage();
         return 1;
     }
-    int port = std::atoi( argv[1] );
+    int c_port = std::atoi( argv[1] );
+    int s_port = std::atoi( argv[2] );
+	if(argc ==5){
+        std::string p_addr{argv[3]};       //primary server addr
+        int p_port = std::atoi( argv[4] ); //primary server port
 
-    //std::vector<std::unique_ptr<SyncManager>> conns;
-    auto accepter = std::thread{accept_thread, port};
-    auto cleaner = std::thread{clean_thread};
-
-    accepter.join();
-    cleaner.join();
+		//replicated server
+		ReplicationServer rs(c_port, s_port, p_addr, p_port);
+	}else{
+		//primary server
+		ReplicationServer rs(c_port, s_port);
+	}
 
     return 0;
 }
 
-void accept_thread(int port) {
-    while( true ) {
-        auto sync_manager = std::unique_ptr<SyncManager>( new SyncManager{port} );
-        conn_mutex_g.lock();
-        conns_g.push_back( std::move(sync_manager) );
-        conn_mutex_g.unlock();
-    }
-}
-
-void clean_thread() {
-    while(true) {
-        conn_mutex_g.lock();
-        for( int i=0; i<conns_g.size(); i++ ) {
-            if( !conns_g[i]->alive() ) {
-                std::cerr << "Dropped connection\n";
-                conns_g.erase( conns_g.begin() + i );
-                i--;
-            }
-        }
-        conn_mutex_g.unlock();
-        std::this_thread::sleep_for( std::chrono::milliseconds( 200 ) );
-    }
-}
 
 void print_usage() {
     std::cerr
         << "Usage:" << std::endl
-        << "server <port>" << std::endl
-    ;
+        << "server <c_port> <s_port> [p_addr p_port]" << std::endl
+        << "    <c_port>  : port accepting clients" << std::endl
+        << "    <s_port>  : port accepting replicated servers" << std::endl
+        << "    <p_addr>  : ip_addr of primary server (for replicated servers)" << std::endl
+        << "    <p_port>  : port of primary server (for replicated servers)" << std::endl << std::endl
+        << "examples:" << std::endl <<  std::endl
+        << "server listen for clients on port 12000 and for replicated servers on 13000:" << std::endl
+        << "    ./server 12000 13000" << std::endl <<std::endl
+        << "server connecting on primary on example above:" << std::endl
+        << "    ./server 12000 13001 localhost 13000" << std::endl;
+   
 }

@@ -26,6 +26,7 @@ SyncManager::SyncManager(
 {
 	this->username= username;
 	this->client_mode  = true;
+	this->operationMode = SyncMode::Client;
 
     _thread = std::shared_ptr<std::thread>{ new std::thread{ 
         sync_thread, 
@@ -33,12 +34,29 @@ SyncManager::SyncManager(
     }};
 }
 
-SyncManager::SyncManager( int port ) 
+SyncManager::SyncManager( 
+        const std::string& addr, 
+        int port
+) : _conn{ Connection::connect( addr, port ) },
+    _stop{ new bool{false} }
+{
+	this->username= std::string{};
+	this->client_mode  = true;
+	this->operationMode = SyncMode::Replicated;
+
+    _thread = std::shared_ptr<std::thread>{ new std::thread{ 
+        sync_thread, 
+		this,
+    }};
+}
+
+SyncManager::SyncManager( int port, SyncMode mode)
     : _conn{ Connection::listen( port ) },
       _stop{ new bool{false} }
 {
 	username = std::string{};
 	this->client_mode = false;
+	this->operationMode = mode;
 
     _thread = std::shared_ptr<std::thread>{ new std::thread{ 
         sync_thread, 
@@ -54,32 +72,77 @@ SyncManager::~SyncManager() {
 }
 
 void SyncManager::syncThread() {
-    if( username.size() > 0 ) {
-        sync_dir = "sync_dir";
-        // client mode, send username to the server
-        Message msg;
-        msg.type = MessageType::USERNAME;
-        std::strcpy(msg.filename, username.c_str());
-        msg.file_length = 0;
-        _conn->send( (uint8_t*)&msg, sizeof(Message) );
-        print_msg( std::string{"synching '"} + sync_dir + std::string{"'"}, client_mode );
-    } else {
-        // server mode, wait for client username
-        ReceivedData data = _conn->receive(-1);
-        Message* msg = (Message*)data.data.get();
-        username = std::string{msg->filename};
-        sync_dir = username + "/sync_dir";
-        mkdir(username.c_str(), 0777);
-        mkdir(sync_dir.c_str(), 0777);
-        // send all files
-        if( msg->type == MessageType::USERNAME ) {
-            for( const auto& filename : listdir( sync_dir ) ) {
-                send_file( filename);
+	switch(operationMode)
+	{
+        case SyncMode::Client:
+            {
+                sync_dir = "sync_dir";
+                // client mode, send username to the server
+                Message msg;
+                msg.type = MessageType::USERNAME;
+                std::strcpy(msg.filename, username.c_str());
+                msg.file_length = 0;
+                _conn->send( (uint8_t*)&msg, sizeof(Message) );
+                print_msg( std::string{"synching '"} + sync_dir + std::string{"'"}, client_mode );
             }
-            print_msg( std::string{"synching '"} + sync_dir + std::string{"'"}, client_mode );
-        }
+            break;
+        case SyncMode::Server:
+            // server mode, wait for client username
+            {
+                ReceivedData data = _conn->receive(-1);
+                Message* msg = (Message*)data.data.get();
+                username = std::string{msg->filename};
+                sync_dir = username + "/sync_dir";
+                mkdir(username.c_str(), 0777);
+                mkdir(sync_dir.c_str(), 0777);
+                // send all files
+                if( msg->type == MessageType::USERNAME ) {
+                    for( const auto& filename : listdir( sync_dir ) ) {
+                        send_file( filename);
+                    }
+                    print_msg( std::string{"synching '"} + sync_dir + std::string{"'"}, client_mode );
+                }
+            }
+            break;
+        case SyncMode::Primary:
+            // Primary server mode, transmit all client directories
+            {
+                //TODO: ZIP CLIENTS DIRECTORY AND TRANSMIT
+                //      TODO JOB No 4
+                std::cerr <<  "TODO: Fix Sync between primary and Replicated Servers";
+                std::abort();
+                sync_dir = "clients";
+                mkdir(sync_dir.c_str(), 0777);
+                // send all files
+                //filename= zip(sync_dir);
+                //send_file( filename);
+                print_msg( std::string{"synching '"} + sync_dir + std::string{"'"}, client_mode );
+            }
+            break;
+        case SyncMode::Replicated:
+            {
+                //TODO: ZIP CLIENTS DIRECTORY AND TRANSMIT
+                //      TODO JOB No 4
+                std::cerr <<  "TODO: Fix Sync between primary and Replicated Servers";
+                std::abort();
 
-    }
+                ReceivedData data = _conn->receive(-1);
+                Message* msg = (Message*)data.data.get();
+                sync_dir = "/clients";
+                mkdir(sync_dir.c_str(), 0777);
+         
+                if(msg->type == MessageType::UPDATE_FILE){
+                        std::ofstream ofs{ msg->filename , std::ios::binary | std::ios::trunc };
+                        ofs.write( msg->bytes, msg->file_length );
+                }
+                //unzip(filename);
+                //rm(filename);
+
+                print_msg( std::string{"synching '"} + sync_dir + std::string{"'"}, client_mode );
+            }
+            break;
+		//TODO: Sync between primary and replica servers
+	}
 
     // create dir TODO check if already exits and if was sucessful
     mkdir(sync_dir.c_str(), 0777);

@@ -8,6 +8,13 @@
 
 class SyncManager {
     public:
+		enum class SyncMode: uint8_t {
+			Client,
+			Server,
+			Primary,
+			Replicated
+		};
+
         /// Start client syncronization
         SyncManager( 
                 const std::string& addr, 
@@ -15,8 +22,14 @@ class SyncManager {
                 const std::string& username
         );
 
-        /// Start server syncroniztion
-        SyncManager( int port );
+        /// Start Replicated syncronization
+        SyncManager( 
+                const std::string& addr, 
+                int port
+        );
+
+        /// Start server or primary syncroniztion
+        SyncManager( int port, SyncMode mode= SyncMode::Server);
         SyncManager( SyncManager&& other ) = default;
 
         ~SyncManager();
@@ -35,10 +48,13 @@ class SyncManager {
 		std::string getUsername() { return username;}
 
 		void syncThread(void);
+
+
     private:
 		std::string sync_dir;
 		std::string username;
 		bool client_mode;	
+		SyncMode operationMode;
 
 		void send_file(std::string filename);
 		void delete_file( std::string filename);
