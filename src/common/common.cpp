@@ -48,12 +48,15 @@ std::string printdir( const std::string& dirname ) {
     return strs.str();
 }
 
-std::vector<std::string> listdir( const std::string& dirname ) {
+std::vector<std::string> listdir( const std::string& dirname, bool directories ) {
     std::vector<std::string> files;
     auto dir = opendir( dirname.c_str() );
     dirent* entry;
     while( (entry = readdir(dir)) != NULL ) {
-        if(entry->d_type == DT_REG) {
+        if( !directories && entry->d_type == DT_REG) {
+            files.push_back( entry->d_name );
+        }
+        if( directories && entry->d_type == DT_DIR ) {
             files.push_back( entry->d_name );
         }
     }

@@ -5,7 +5,7 @@
 int main() {
     Watcher watcher;
 
-    watcher.add_dir("sync_dir");
+    watcher.add_dir("sync_dir", 1);
 
     bool watch = true;
     while(watch) {

@@ -7,6 +7,8 @@
 #include <sys/inotify.h>
 #include <fcntl.h>
 
+#include "common.hpp"
+
 #define MAX_EVENTS 1024
 #define BUF_LEN MAX_EVENTS * ( sizeof(inotify_event) + NAME_MAX )
 
@@ -23,18 +25,28 @@ Watcher::~Watcher() {
     close(_fd);
 }
 
-void Watcher::add_dir(const std::string& dir_name) {
+void Watcher::add_dir(const std::string& dir_name, unsigned int recurse) {
     const auto flags = IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_TO | IN_MOVED_FROM;
     auto wd = inotify_add_watch(_fd, dir_name.c_str(), flags);
     if ( wd < 0 ) {
         throw WatcherException{ std::string{ strerror(errno) } };
     }
+    if( recurse > 0 ) {
+        for( const auto& subdir : listdir( dir_name, true ) ) {
+            auto subdir_path = dir_name + std::string{"/"} + subdir;
+            add_dir( subdir_path, recurse-1 );
+        }
+    }
     _dir_map[dir_name] = wd;
+    _dir_map_rev[wd] = dir_name;
+    _dir_depths[wd] = recurse;
 }
 
 void Watcher::rm_dir(const std::string& dir_name) {
     if( _dir_map.count(dir_name) > 0 ) {
         inotify_rm_watch(_fd, _dir_map[dir_name]);
+        _dir_map_rev.erase(_dir_map[dir_name]);
+        _dir_depths.erase(_dir_map[dir_name]);
         _dir_map.erase(dir_name);
     }
 }
@@ -52,25 +64,39 @@ Watcher::Event Watcher::next() {
         long long i = 0;
         while( i < bytes_read ) {
             inotify_event* event_ptr = (inotify_event*)&buffer[i];
+            auto full_name = std::string{ _dir_map_rev[event_ptr->wd] } + std::string{"/"} + std::string{ event_ptr->name };
 
-            if( event_ptr->mask & (IN_CREATE | IN_MOVED_TO) ) {
-                Event event{ Watcher::EventType::CREATED, event_ptr->name };
-                _event_queue.push(event);
-            } else if( event_ptr->mask & IN_MODIFY ) {
-                Event event{ Watcher::EventType::MODIFIED, event_ptr->name };
-                _event_queue.push(event);
-            } else if( event_ptr->mask & (IN_DELETE | IN_MOVED_FROM) ) {
-                Event event{ Watcher::EventType::REMOVED, event_ptr->name };
-                _event_queue.push(event);
+            std::string part_name;
+            auto first = full_name.find("/");
+            if( first != std::string::npos ) {
+                part_name = std::string{ full_name, first+1 };
             }
+
+            if( event_ptr->mask & (IN_CREATE | IN_MOVED_TO) && !(event_ptr->mask & IN_ISDIR) ) {
+                Event event{ Watcher::EventType::CREATED, part_name };
+                _event_queue.push(event);
+            } else if( event_ptr->mask & IN_MODIFY && !(event_ptr->mask & IN_ISDIR) ) {
+                Event event{ Watcher::EventType::MODIFIED, part_name };
+                _event_queue.push(event);
+            } else if( event_ptr->mask & (IN_DELETE | IN_MOVED_FROM) && !(event_ptr->mask & IN_ISDIR) ) {
+                Event event{ Watcher::EventType::REMOVED, part_name };
+                _event_queue.push(event);
+            } else if( event_ptr->mask & (IN_CREATE | IN_MOVED_TO) && (event_ptr->mask & IN_ISDIR) ) {
+                if( _dir_depths[ event_ptr->wd ] > 0 ) {
+                    add_dir( full_name, _dir_depths[ event_ptr->wd ]-1 );
+                }
+            } 
 
             i += sizeof(inotify_event) + event_ptr->len;
         }
         
     }
 
-    auto event = _event_queue.front();
-    _event_queue.pop();
+    Event event{  Watcher::EventType::NOEVENT, ""  };
+    if( _event_queue.size() > 0 ) {
+        event = _event_queue.front();
+        _event_queue.pop();
+    }
     return event;
 }
 

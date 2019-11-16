@@ -8,7 +8,7 @@ std::vector<std::string> split( const std::string& str );
 std::string basename( const std::string& str );
 
 // list files in a directory
-std::vector<std::string> listdir( const std::string& dirname );
+std::vector<std::string> listdir( const std::string& dirname, bool directories=false );
 
 // print files in a directory with information
 std::string printdir( const std::string& dirname );

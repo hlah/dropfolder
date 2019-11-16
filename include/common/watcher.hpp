@@ -28,8 +28,8 @@ class Watcher {
 
         ~Watcher();
 
-        // Add directory to be watched
-        void add_dir(const std::string& dir_name);
+        // Add directory to be watched, with recursive addition depth as second parameter
+        void add_dir(const std::string& dir_name, unsigned int recurse=0);
 
         // Add direcotry to be watched
         void rm_dir(const std::string& dir_name);
@@ -40,6 +40,8 @@ class Watcher {
     private:
         int _fd;
         std::unordered_map<std::string, int> _dir_map;
+        std::unordered_map<int, std::string> _dir_map_rev;
+        std::unordered_map<int, unsigned int> _dir_depths;
         std::queue<Event> _event_queue;
 };
 
