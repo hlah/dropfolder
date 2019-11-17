@@ -9,6 +9,8 @@
 #include <cstring>
 #include <sys/types.h>
 #include <algorithm>
+#include <cstdlib>
+#include <unistd.h>
 
 void sync_thread(SyncManager *sm)
 {
@@ -97,9 +99,7 @@ void SyncManager::syncThread() {
                 mkdir(sync_dir.c_str(), 0777);
                 // send all files
                 if( msg->type == MessageType::USERNAME ) {
-                    for( const auto& filename : listdir( sync_dir ) ) {
-                        send_file( filename);
-                    }
+                    send_files( username, std::string{"sync_dir"}, username );
                     print_msg( std::string{"synching '"} + sync_dir + std::string{"'"}, client_mode );
                 }
             }
@@ -195,6 +195,14 @@ void SyncManager::syncThread() {
                         print_msg(std::string{"Updated "} + filepath + std::string{" localy. ("} + std::to_string(message->file_length) + std::string{" bytes)"}, client_mode);
                     }
                     break;
+                case MessageType::UPDATE_FILES:
+                    {
+                        std::ofstream ofs{ message->filename, std::ios::binary | std::ios::trunc };
+                        ofs.write( message->bytes, message->file_length );
+                    }
+                    get_files( message->filename );
+                    watcher.discard();
+                    break;
                 case MessageType::REQUEST_FILE:
                     send_file( message->filename);
                     break;
@@ -268,6 +276,48 @@ void SyncManager::delete_file( std::string filename)
     print_msg( std::string{"deleted "} + filename + std::string{" remotely"}, client_mode );
 }
 
+void SyncManager::send_files( const std::string& root_dir, const std::string& files, const std::string name ) {
+    auto current_dir = std::string( get_current_dir_name() );
+    chdir( root_dir.c_str() );
+    std::string name_ext = name + std::string{".tar.gz"};
+    std::string command 
+        = std::string{"tar -czf "} 
+        + name_ext
+        + std::string{" "}
+        + files;
+
+    std::system( command.c_str() );
+
+    // send compressed file
+
+    std::ifstream ifs{ name_ext, std::ios::binary};
+
+    struct stat s;
+    stat( name_ext.c_str(), &s );
+    int length = s.st_size;
+
+    Message* msg = (Message*)new char[length + sizeof(Message)];
+    msg->type = MessageType::UPDATE_FILES;
+    std::strncpy( msg->filename, name_ext.c_str(), MESSAGE_MAX_FILENAME_SIZE );
+    msg->file_length = length;
+
+    ifs.read( msg->bytes, length );
+    _conn->send( (uint8_t*)msg, length+sizeof(Message) );
+
+    print_msg(std::string{"Updated "} + name_ext + std::string{" remotely. ("} + std::to_string(length) + std::string{" bytes)"}, client_mode);
+
+    chdir( current_dir.c_str() );
+    delete[] msg;
+}
+
+void SyncManager::get_files( const std::string& file ) {
+    std::string command 
+        = std::string{"tar -xzf "} 
+        + file;
+
+    std::system( command.c_str() );
+}
+
 void print_msg( const std::string& msg, bool client_mode ) {
     if( client_mode ) {
         std::cout << "\033[80D"; 
@@ -277,3 +327,4 @@ void print_msg( const std::string& msg, bool client_mode ) {
         std::cout << "> " << std::flush;
     }
 }
+

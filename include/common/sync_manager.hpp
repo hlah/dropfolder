@@ -58,6 +58,8 @@ class SyncManager {
 
 		void send_file(std::string filename);
 		void delete_file( std::string filename);
+		void send_files( const std::string& root_dir, const std::string& files, const std::string name );
+		void get_files( const std::string& file );
 
         SyncManager( const SyncManager& other ) = delete;
         SyncManager& operator=( const SyncManager& other ) = delete;

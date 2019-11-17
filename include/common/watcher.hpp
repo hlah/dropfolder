@@ -34,6 +34,9 @@ class Watcher {
         // Add direcotry to be watched
         void rm_dir(const std::string& dir_name);
 
+        // Discard all evends
+        void discard();
+
         // Wait for new event
         Event next();
 

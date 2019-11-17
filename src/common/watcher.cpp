@@ -6,6 +6,7 @@
 #include <limits.h>
 #include <sys/inotify.h>
 #include <fcntl.h>
+#include <stdio.h>
 
 #include "common.hpp"
 
@@ -98,6 +99,15 @@ Watcher::Event Watcher::next() {
         _event_queue.pop();
     }
     return event;
+}
+
+void Watcher::discard() {
+    char buffer[BUF_LEN] = {0};
+    auto bytes_read = read(_fd, buffer, BUF_LEN );
+    while( bytes_read > 0 ) {
+        bytes_read = read(_fd, buffer, BUF_LEN );
+    }
+
 }
 
 std::ostream& operator<<(std::ostream& os, const Watcher::EventType& e_type) {
