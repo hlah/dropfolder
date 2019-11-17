@@ -67,20 +67,14 @@ Watcher::Event Watcher::next() {
             inotify_event* event_ptr = (inotify_event*)&buffer[i];
             auto full_name = std::string{ _dir_map_rev[event_ptr->wd] } + std::string{"/"} + std::string{ event_ptr->name };
 
-            std::string part_name;
-            auto first = full_name.find("/");
-            if( first != std::string::npos ) {
-                part_name = std::string{ full_name, first+1 };
-            }
-
             if( event_ptr->mask & (IN_CREATE | IN_MOVED_TO) && !(event_ptr->mask & IN_ISDIR) ) {
-                Event event{ Watcher::EventType::CREATED, part_name };
+                Event event{ Watcher::EventType::CREATED, full_name };
                 _event_queue.push(event);
             } else if( event_ptr->mask & IN_MODIFY && !(event_ptr->mask & IN_ISDIR) ) {
-                Event event{ Watcher::EventType::MODIFIED, part_name };
+                Event event{ Watcher::EventType::MODIFIED, full_name };
                 _event_queue.push(event);
             } else if( event_ptr->mask & (IN_DELETE | IN_MOVED_FROM) && !(event_ptr->mask & IN_ISDIR) ) {
-                Event event{ Watcher::EventType::REMOVED, part_name };
+                Event event{ Watcher::EventType::REMOVED, full_name };
                 _event_queue.push(event);
             } else if( event_ptr->mask & (IN_CREATE | IN_MOVED_TO) && (event_ptr->mask & IN_ISDIR) ) {
                 if( _dir_depths[ event_ptr->wd ] > 0 ) {

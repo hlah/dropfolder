@@ -94,12 +94,13 @@ void SyncManager::syncThread() {
                 ReceivedData data = _conn->receive(-1);
                 Message* msg = (Message*)data.data.get();
                 username = std::string{msg->filename};
-                sync_dir = username + "/sync_dir";
-                mkdir(username.c_str(), 0777);
+                sync_dir = std::string{"users/"} + username + "/sync_dir";
+                mkdir("users", 0777);
+                mkdir((std::string{"users/"} + username).c_str(), 0777);
                 mkdir(sync_dir.c_str(), 0777);
                 // send all files
                 if( msg->type == MessageType::USERNAME ) {
-                    send_files( username, std::string{"sync_dir"}, username );
+                    send_files( std::string{"users/"}+username, std::string{"sync_dir"}, username );
                     print_msg( std::string{"synching '"} + sync_dir + std::string{"'"}, client_mode );
                 }
             }
@@ -111,7 +112,7 @@ void SyncManager::syncThread() {
                 //      TODO JOB No 4
                 std::cerr <<  "TODO: Fix Sync between primary and Replicated Servers";
                 std::abort();
-                sync_dir = "clients";
+                sync_dir = "users";
                 mkdir(sync_dir.c_str(), 0777);
                 // send all files
                 //filename= zip(sync_dir);
@@ -128,7 +129,7 @@ void SyncManager::syncThread() {
 
                 ReceivedData data = _conn->receive(-1);
                 Message* msg = (Message*)data.data.get();
-                sync_dir = "/clients";
+                sync_dir = "users";
                 mkdir(sync_dir.c_str(), 0777);
          
                 if(msg->type == MessageType::UPDATE_FILE){
@@ -148,6 +149,7 @@ void SyncManager::syncThread() {
     mkdir(sync_dir.c_str(), 0777);
 
     Watcher watcher;
+    std::cerr << "Watching " << sync_dir << std::endl;
     watcher.add_dir( sync_dir );
 
 
@@ -166,7 +168,8 @@ void SyncManager::syncThread() {
             switch(event.type) {
                 case Watcher::EventType::MODIFIED:
                 case Watcher::EventType::CREATED:
-                    send_file( event.filename);
+                    std::cerr << "Sending " << event.filename << std::endl;
+                    send_file( event.filename );
                     break;
                 case Watcher::EventType::REMOVED:
                     delete_file( event.filename);
@@ -185,13 +188,13 @@ void SyncManager::syncThread() {
                 case MessageType::DELETE_FILE:
                     print_msg(std::string{"Deleted "} + filepath + std::string{" localy."}, client_mode);
                     std::remove( filepath.c_str() );
-                    ignore.push_back( message->filename );
+                    ignore.push_back( filepath );
                     break;
                 case MessageType::UPDATE_FILE:
                     {
                         std::ofstream ofs{ filepath.c_str(), std::ios::binary | std::ios::trunc };
                         ofs.write( message->bytes, message->file_length );
-                        ignore.push_back( message->filename );
+                        ignore.push_back( filepath );
                         print_msg(std::string{"Updated "} + filepath + std::string{" localy. ("} + std::to_string(message->file_length) + std::string{" bytes)"}, client_mode);
                     }
                     break;
@@ -232,10 +235,12 @@ void SyncManager::syncThread() {
     }
 }
 
-void SyncManager::send_file(std::string filename)
+void SyncManager::send_file(std::string filepath)
 {
-    std::string filepath{ sync_dir + std::string{"/"} + filename};
     std::ifstream ifs{ filepath, std::ios::binary};
+
+    // remove sync_dir prefix
+    std::string filename{ filepath, sync_dir.size()+1 };
 
     if( !ifs.fail() ) {
         struct stat s;
@@ -263,8 +268,11 @@ void SyncManager::send_file(std::string filename)
     }
 }
 
-void SyncManager::delete_file( std::string filename)
+void SyncManager::delete_file( std::string filepath)
 {
+    // remove sync_dir prefix
+    std::string filename{ filepath, sync_dir.size()+1 };
+
     Message msg;
     msg.type = MessageType::DELETE_FILE;
     std::strncpy( msg.filename, filename.c_str(), MESSAGE_MAX_FILENAME_SIZE );
@@ -307,6 +315,7 @@ void SyncManager::send_files( const std::string& root_dir, const std::string& fi
     print_msg(std::string{"Updated "} + name_ext + std::string{" remotely. ("} + std::to_string(length) + std::string{" bytes)"}, client_mode);
 
     chdir( current_dir.c_str() );
+    std::remove( name_ext.c_str() );
     delete[] msg;
 }
 
@@ -316,6 +325,7 @@ void SyncManager::get_files( const std::string& file ) {
         + file;
 
     std::system( command.c_str() );
+    std::remove( file.c_str() );
 }
 
 void print_msg( const std::string& msg, bool client_mode ) {

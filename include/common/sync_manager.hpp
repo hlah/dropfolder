@@ -56,8 +56,8 @@ class SyncManager {
 		bool client_mode;	
 		SyncMode operationMode;
 
-		void send_file(std::string filename);
-		void delete_file( std::string filename);
+		void send_file(std::string filepath);
+		void delete_file( std::string filepath);
 		void send_files( const std::string& root_dir, const std::string& files, const std::string name );
 		void get_files( const std::string& file );
 
