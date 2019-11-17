@@ -94,12 +94,13 @@ void SyncManager::syncThread() {
                 ReceivedData data = _conn->receive(-1);
                 Message* msg = (Message*)data.data.get();
                 username = std::string{msg->filename};
-                sync_dir = username + "/sync_dir";
-                mkdir(username.c_str(), 0777);
+                sync_dir = std::string{"users/"} + username + "/sync_dir";
+                mkdir("users", 0777);
+                mkdir((std::string{"users/"} + username).c_str(), 0777);
                 mkdir(sync_dir.c_str(), 0777);
                 // send all files
                 if( msg->type == MessageType::USERNAME ) {
-                    send_files( username, std::string{"sync_dir"}, username );
+                    send_files( std::string{"users/"}+username, std::string{"sync_dir"}, username );
                     print_msg( std::string{"synching '"} + sync_dir + std::string{"'"}, client_mode );
                 }
             }
@@ -111,7 +112,7 @@ void SyncManager::syncThread() {
                 //      TODO JOB No 4
                 std::cerr <<  "TODO: Fix Sync between primary and Replicated Servers";
                 std::abort();
-                sync_dir = "clients";
+                sync_dir = "users";
                 mkdir(sync_dir.c_str(), 0777);
                 // send all files
                 //filename= zip(sync_dir);
@@ -128,7 +129,7 @@ void SyncManager::syncThread() {
 
                 ReceivedData data = _conn->receive(-1);
                 Message* msg = (Message*)data.data.get();
-                sync_dir = "clients";
+                sync_dir = "users";
                 mkdir(sync_dir.c_str(), 0777);
          
                 if(msg->type == MessageType::UPDATE_FILE){
@@ -148,6 +149,7 @@ void SyncManager::syncThread() {
     mkdir(sync_dir.c_str(), 0777);
 
     Watcher watcher;
+    std::cerr << "Watching " << sync_dir << std::endl;
     watcher.add_dir( sync_dir );
 
 
@@ -166,6 +168,7 @@ void SyncManager::syncThread() {
             switch(event.type) {
                 case Watcher::EventType::MODIFIED:
                 case Watcher::EventType::CREATED:
+                    std::cerr << "Sending " << event.filename << std::endl;
                     send_file( event.filename );
                     break;
                 case Watcher::EventType::REMOVED:
