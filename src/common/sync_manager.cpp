@@ -312,6 +312,7 @@ void SyncManager::send_files( const std::string& root_dir, const std::string& fi
     print_msg(std::string{"Updated "} + name_ext + std::string{" remotely. ("} + std::to_string(length) + std::string{" bytes)"}, client_mode);
 
     chdir( current_dir.c_str() );
+    std::remove( name_ext.c_str() );
     delete[] msg;
 }
 
@@ -321,6 +322,7 @@ void SyncManager::get_files( const std::string& file ) {
         + file;
 
     std::system( command.c_str() );
+    std::remove( file.c_str() );
 }
 
 void print_msg( const std::string& msg, bool client_mode ) {
