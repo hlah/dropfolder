@@ -128,7 +128,7 @@ void SyncManager::syncThread() {
 
                 ReceivedData data = _conn->receive(-1);
                 Message* msg = (Message*)data.data.get();
-                sync_dir = "/clients";
+                sync_dir = "clients";
                 mkdir(sync_dir.c_str(), 0777);
          
                 if(msg->type == MessageType::UPDATE_FILE){
@@ -166,7 +166,7 @@ void SyncManager::syncThread() {
             switch(event.type) {
                 case Watcher::EventType::MODIFIED:
                 case Watcher::EventType::CREATED:
-                    send_file( event.filename);
+                    send_file( event.filename );
                     break;
                 case Watcher::EventType::REMOVED:
                     delete_file( event.filename);
@@ -185,13 +185,13 @@ void SyncManager::syncThread() {
                 case MessageType::DELETE_FILE:
                     print_msg(std::string{"Deleted "} + filepath + std::string{" localy."}, client_mode);
                     std::remove( filepath.c_str() );
-                    ignore.push_back( message->filename );
+                    ignore.push_back( filepath );
                     break;
                 case MessageType::UPDATE_FILE:
                     {
                         std::ofstream ofs{ filepath.c_str(), std::ios::binary | std::ios::trunc };
                         ofs.write( message->bytes, message->file_length );
-                        ignore.push_back( message->filename );
+                        ignore.push_back( filepath );
                         print_msg(std::string{"Updated "} + filepath + std::string{" localy. ("} + std::to_string(message->file_length) + std::string{" bytes)"}, client_mode);
                     }
                     break;
@@ -232,10 +232,12 @@ void SyncManager::syncThread() {
     }
 }
 
-void SyncManager::send_file(std::string filename)
+void SyncManager::send_file(std::string filepath)
 {
-    std::string filepath{ sync_dir + std::string{"/"} + filename};
     std::ifstream ifs{ filepath, std::ios::binary};
+
+    // remove sync_dir prefix
+    std::string filename{ filepath, sync_dir.size()+1 };
 
     if( !ifs.fail() ) {
         struct stat s;
@@ -263,8 +265,11 @@ void SyncManager::send_file(std::string filename)
     }
 }
 
-void SyncManager::delete_file( std::string filename)
+void SyncManager::delete_file( std::string filepath)
 {
+    // remove sync_dir prefix
+    std::string filename{ filepath, sync_dir.size()+1 };
+
     Message msg;
     msg.type = MessageType::DELETE_FILE;
     std::strncpy( msg.filename, filename.c_str(), MESSAGE_MAX_FILENAME_SIZE );

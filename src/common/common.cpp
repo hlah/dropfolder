@@ -28,6 +28,15 @@ std::string basename( const std::string& str ) {
     }
 }
 
+std::string pathrest( const std::string& str ) {
+    std::string part_name;
+    auto first = str.find("/");
+    if( first != std::string::npos ) {
+        part_name = std::string{ str, first+1 };
+    }
+    return part_name;
+}
+
 std::string printdir( const std::string& dirname ) {
     std::stringstream strs;
 
