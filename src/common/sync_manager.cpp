@@ -23,8 +23,9 @@ SyncManager::SyncManager(
         const std::string& addr, 
         int port, 
         const std::string& username
-) : _conn{ Connection::connect( addr, port ) },
-    _stop{ new bool{false} }
+) : _stop{ new bool{false} },
+    _conn{ Connection::connect( addr, port ) }
+    
 {
 	this->username= username;
 	this->client_mode  = true;
@@ -39,12 +40,15 @@ SyncManager::SyncManager(
 SyncManager::SyncManager( 
         const std::string& addr, 
         int port
-) : _conn{ Connection::connect( addr, port ) },
-    _stop{ new bool{false} }
+) : _stop{ new bool{false} },
+    _conn{ Connection::connect( addr, port ) }
+    
 {
 	this->username= std::string{};
 	this->client_mode  = true;
 	this->operationMode = SyncMode::Replicated;
+
+    std::cout << "host port: " << _conn->getPort() << std::endl;
 
     _thread = std::shared_ptr<std::thread>{ new std::thread{ 
         sync_thread, 
@@ -53,8 +57,8 @@ SyncManager::SyncManager(
 }
 
 SyncManager::SyncManager( int port, SyncMode mode)
-    : _conn{ Connection::listen( port ) },
-      _stop{ new bool{false} }
+    : _stop{ new bool{false} },
+      _conn{ Connection::listen( port ) }
 {
 	username = std::string{};
 	this->client_mode = false;
@@ -64,6 +68,14 @@ SyncManager::SyncManager( int port, SyncMode mode)
         sync_thread, 
 		this,
     }};
+
+    if(mode==SyncMode::Server){
+        std::cout << "willl block!" << std::endl;
+        std::unique_lock<std::mutex> lck (username_mutex);
+        while(getUsername()==""){
+            username_cv.wait(lck);
+        }
+    }
 }
 
 SyncManager::~SyncManager() {
@@ -93,15 +105,22 @@ void SyncManager::syncThread() {
             {
                 ReceivedData data = _conn->receive(-1);
                 Message* msg = (Message*)data.data.get();
-                username = std::string{msg->filename};
-                sync_dir = std::string{"users/"} + username + "/sync_dir";
-                mkdir("users", 0777);
-                mkdir((std::string{"users/"} + username).c_str(), 0777);
-                mkdir(sync_dir.c_str(), 0777);
-                // send all files
                 if( msg->type == MessageType::USERNAME ) {
+                    username = std::string{msg->filename};
+
+                    username_cv.notify_one();
+
+                    sync_dir = std::string{"users/"} + username + "/sync_dir";
+                    mkdir("users", 0777);
+                    mkdir((std::string{"users/"} + username).c_str(), 0777);
+                    mkdir(sync_dir.c_str(), 0777);
+                    // send all files
                     send_files( std::string{"users/"}+username, std::string{"sync_dir"}, username );
                     print_msg( std::string{"synching '"} + sync_dir + std::string{"'"}, client_mode );
+                }else{
+                    std::cout << "unexpected message. expecting "
+                              << (uint8_t)MessageType::USERNAME
+                              << "came" << (uint8_t)msg->type << std::endl;
                 }
             }
             break;
@@ -110,13 +129,15 @@ void SyncManager::syncThread() {
             {
                 //TODO: ZIP CLIENTS DIRECTORY AND TRANSMIT
                 //      TODO JOB No 4
-                std::cerr <<  "TODO: Fix Sync between primary and Replicated Servers";
-                std::abort();
+//                std::cerr <<  "TODO: Fix Sync between primary and Replicated Servers";
+//                std::abort();
                 sync_dir = "users";
                 mkdir(sync_dir.c_str(), 0777);
                 // send all files
                 //filename= zip(sync_dir);
                 //send_file( filename);
+
+                send_files( std::string{"users/"}, std::string{"./*"}, std::string{"users"});
                 print_msg( std::string{"synching '"} + sync_dir + std::string{"'"}, client_mode );
             }
             break;
@@ -124,20 +145,23 @@ void SyncManager::syncThread() {
             {
                 //TODO: ZIP CLIENTS DIRECTORY AND TRANSMIT
                 //      TODO JOB No 4
-                std::cerr <<  "TODO: Fix Sync between primary and Replicated Servers";
-                std::abort();
+//                std::cerr <<  "TODO: Fix Sync between primary and Replicated Servers";
+//                std::abort();
 
                 ReceivedData data = _conn->receive(-1);
                 Message* msg = (Message*)data.data.get();
                 sync_dir = "users";
                 mkdir(sync_dir.c_str(), 0777);
          
-                if(msg->type == MessageType::UPDATE_FILE){
+                if(msg->type == MessageType::UPDATE_FILES){
                         std::ofstream ofs{ msg->filename , std::ios::binary | std::ios::trunc };
                         ofs.write( msg->bytes, msg->file_length );
+                        get_files( msg->filename );
+                }else{
+                    std::cout << "unexpected message. expecting "
+                              << (uint8_t)MessageType::UPDATE_FILES
+                              << "came" << (uint8_t)msg->type << std::endl;
                 }
-                //unzip(filename);
-                //rm(filename);
 
                 print_msg( std::string{"synching '"} + sync_dir + std::string{"'"}, client_mode );
             }
@@ -150,8 +174,12 @@ void SyncManager::syncThread() {
 
     Watcher watcher;
     std::cerr << "Watching " << sync_dir << std::endl;
-    watcher.add_dir( sync_dir );
-
+    if(operationMode == SyncMode::Primary ||
+       operationMode == SyncMode::Replicated){ 
+        watcher.add_dir( sync_dir, 1);
+    }else{
+        watcher.add_dir( sync_dir );
+    }
 
     std::vector<std::string> ignore;
 
@@ -180,8 +208,8 @@ void SyncManager::syncThread() {
         }
 
         // TODO get messages from server
-        ReceivedData data = _conn->receive();
-        while( data.length != 0 ) {
+        while( _conn->hasNewMessage()) {
+            ReceivedData data = _conn->receive();
             Message* message = (Message*)data.data.get();
             std::string filepath{ sync_dir + std::string{"/"} + message->filename };
             switch(message->type) {
@@ -200,9 +228,11 @@ void SyncManager::syncThread() {
                     break;
                 case MessageType::UPDATE_FILES:
                     {
-                        std::ofstream ofs{ message->filename, std::ios::binary | std::ios::trunc };
+                        std::ofstream ofs{message->filename, std::ios::binary | std::ios::trunc };
                         ofs.write( message->bytes, message->file_length );
                     }
+                    std::cout << message->filename << " written(" << message->file_length << " bytes)." << std::endl;
+
                     get_files( message->filename );
                     watcher.discard();
                     break;
@@ -217,15 +247,18 @@ void SyncManager::syncThread() {
                         list_msg->file_length = list_str.size()+1;
                         memcpy( list_msg->bytes, list_str.c_str(), list_msg->file_length+1 );
                         _conn->send( (uint8_t*)list_msg, sizeof(Message) + list_str.size()+1);
+                        delete[] list_msg;
                     }
                     break;
                 case MessageType::DROP:
                     dropped = true;
                     *_stop = true;
                     break;
+
+                default:
+                    break;
             }
 
-            data = _conn->receive();
         }
     }
 
@@ -284,6 +317,8 @@ void SyncManager::delete_file( std::string filepath)
     print_msg( std::string{"deleted "} + filename + std::string{" remotely"}, client_mode );
 }
 
+
+
 void SyncManager::send_files( const std::string& root_dir, const std::string& files, const std::string name ) {
     auto current_dir = std::string( get_current_dir_name() );
     chdir( root_dir.c_str() );
@@ -324,6 +359,7 @@ void SyncManager::get_files( const std::string& file ) {
         = std::string{"tar -xzf "} 
         + file;
 
+    std::cout << "executing command:" << command << std::endl;
     std::system( command.c_str() );
     std::remove( file.c_str() );
 }

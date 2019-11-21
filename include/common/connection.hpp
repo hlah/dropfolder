@@ -30,12 +30,16 @@ class Connection {
         void send(uint8_t* data, size_t size);
 
         // return remote port
-        uint16_t port() const { return ntohs(_other.sin_port); }
+        uint16_t getPeerPort() const { return ntohs(_other.sin_port); }
 
-		//return remote IP
-		uint32_t remoteIP() const { return ntohl(_other.sin_addr.s_addr); }
+		//return local port
+		uint32_t getPeerIP() const { return ntohl(_other.sin_addr.s_addr); }
+        
+        uint16_t getPort();
 
-        // Destrouctor
+        bool hasNewMessage(){ return !recvQueue.empty(); }
+
+        // Destructor
         ~Connection();
         // move constructor
         Connection( Connection&& conn ) noexcept;

@@ -141,6 +141,7 @@ ReceivedData Connection::receive(int receive_timelimit) {
     while(recvQueue.empty() ) {
         if( receive_timelimit >= 0 ) {
             auto now = std::chrono::steady_clock::now();
+            //auto int_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - prev);
             if( now-prev > std::chrono::milliseconds{receive_timelimit} ) {
                 break;
             }
@@ -162,7 +163,7 @@ ReceivedData Connection::receive(int receive_timelimit) {
 
 
 template<class T>
-int Connection::poll_queue(std::queue<T>* a_queue, pthread_cond_t* cond, pthread_mutex_t* mutex, int _timelimit)
+int Connection::poll_queue(std::queue<T>* a_queue, pthread_cond_t* cond, pthread_mutex_t* mutex, int _timelimit_ms)
 {
     int               rc;
     struct timespec   ts;
@@ -178,9 +179,9 @@ int Connection::poll_queue(std::queue<T>* a_queue, pthread_cond_t* cond, pthread
 			/* Convert from timeval to timespec */
 			ts.tv_sec  = tp.tv_sec;
 			ts.tv_nsec = tp.tv_usec * 1000;
-			ts.tv_sec += _timelimit;
+			ts.tv_sec += _timelimit_ms/1000;
 
-			if(_timelimit < 0){
+			if(_timelimit_ms < 0){
 				pthread_cond_wait(cond, mutex);
                 pthread_mutex_unlock(mutex);
 				return 1;
@@ -305,8 +306,8 @@ void Connection::receive_thread()
 	socklen_t sender_addr_len = sizeof(struct sockaddr_in);
 
 	uint16_t current_message_id;
-	uint32_t last_seqn;
-	uint32_t next_seqn;
+//	uint32_t last_seqn;
+//	uint32_t next_seqn;
     
     recvState state= recvState::Waiting;
 
@@ -440,6 +441,16 @@ Connection::Connection(int socket_fd, sockaddr_in other, int timelimit, int tryl
 
 void Connection::throw_errno( const std::string& str ) {
     throw ConnectionException{ str + std::string{": "} + strerror( errno ) + std::string{" ("} + std::to_string(errno) + std::string{")"} };
+}
+
+uint16_t Connection::getPort()
+{
+    struct sockaddr_in addr;
+    socklen_t len;
+    if(getsockname(_socket_fd, (sockaddr*)&addr, &len) == 0){
+        return ntohs(addr.sin_port);
+    }
+    return 0;
 }
 
 int Connection::build_socket() {

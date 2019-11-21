@@ -4,7 +4,8 @@
 
 int main() {
     auto conn = Connection::connect( "localhost", 4001 );
-    std::cout << "Connected to server (server port= " << conn->port() << ")\n";
+    std::cout << "Connected to server (server port= " << conn->getPeerPort() << ")\n";
+    std::cout << "my port: " << conn->getPort() << ")\n";
 
     while( true ) {
         std::cout << "Send message: ";

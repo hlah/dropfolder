@@ -3,6 +3,8 @@
 
 #include "watcher.hpp"
 #include "connection.hpp"
+#include <mutex>
+#include <condition_variable>
 
 #include <thread>
 
@@ -41,8 +43,8 @@ class SyncManager {
         void stop_sync();
 
 		///get sync infos
-		uint32_t getPeerIP() { return _conn->remoteIP();}
-		uint16_t getPeerPort() { return _conn->port();}
+		uint32_t getPeerIP() { return _conn->getPeerIP();}
+		uint16_t getPeerPort() { return _conn->getPeerPort();}
 	   //TODO: how to get username?? 
 	   //      it's discovered after, at sync_thread function, not inside class SyncManager
 		std::string getUsername() { return username;}
@@ -55,6 +57,8 @@ class SyncManager {
 		std::string username;
 		bool client_mode;	
 		SyncMode operationMode;
+        std::mutex username_mutex;
+        std::condition_variable username_cv;
 
 		void send_file(std::string filepath);
 		void delete_file( std::string filepath);

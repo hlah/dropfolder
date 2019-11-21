@@ -1,6 +1,8 @@
 #include "replication_server.hpp"
 #include "sync_manager.hpp"
+#include "message.hpp"
 
+#include <fstream>
 #include <iostream>
 #include <chrono>             // std::chrono::seconds
 
@@ -18,45 +20,85 @@ void clean_thread(ReplicationServer *rs)
 	rs->cleanClientsThread();
 }
 
-
-ReplicationServer::ReplicationServer(uint16_t c_port, uint16_t s_port)
+void accept_ctrl_thread(ReplicationServer *rs)
 {
-	status= State::Primary;
+    rs->acceptCtrlThread();
+}
+
+void failure_detection_thread(ReplicationServer *rm)
+{
+	rm->failureDetectionThread();
+}
+
+ReplicationServer::ReplicationServer(uint16_t c_port, uint16_t s_port, uint16_t ctrl_port)
+{
+	state= ServerState::Primary;
 	this->client_listen_port= c_port;
 	this->server_listen_port= s_port;
+    this->ctrl_port= ctrl_port;
 
     auto accepter_clients = std::thread{accept_clients_thread, this};
     auto accepter_servers = std::thread{accept_servers_thread, this};
     auto cleaner_clients = std::thread{clean_thread, this};
+    auto accepter_cntrl_servers = std::thread{accept_ctrl_thread, this};
+    auto failure_detection = std::thread{failure_detection_thread, this};
+
 
     accepter_clients.join();
     accepter_servers.join();
     cleaner_clients.join();
+    accepter_cntrl_servers.join();
+    failure_detection.join();
 }
 
 
-ReplicationServer::ReplicationServer(uint16_t c_port, uint16_t s_port, const std::string& p_addr, int p_port)
+ReplicationServer::ReplicationServer(uint16_t c_port, uint16_t s_port, uint16_t ctrl_port, const std::string& p_addr, int p_sync_port, uint16_t p_ctrl_port)
 {
-	status= State::Replication;
+	state= ServerState::Replication;
 
 	this->client_listen_port= c_port;
 	this->server_listen_port= s_port;
 
-    primary_sync = std::unique_ptr<SyncManager>( new SyncManager{p_addr, p_port});
+    this->ctrl_port= ctrl_port;
+    this->p_ctrl_port= p_ctrl_port;
+    this->p_addr= p_addr;
+
+    primary_sync = std::unique_ptr<SyncManager>( new SyncManager{p_addr, p_sync_port});
+
+    auto conn = std::shared_ptr<Connection> (Connection::connect((const std::string&) p_addr, (int)p_ctrl_port) );
+    this->ctrl_port= conn->getPort();
+    cntrl_conns.push_back( std::move(conn) );
+
 
     auto accepter_clients = std::thread{accept_clients_thread, this};
     auto accepter_servers = std::thread{accept_servers_thread, this};
     auto cleaner_clients = std::thread{clean_thread, this};
+    auto accepter_cntrl_servers = std::thread{accept_ctrl_thread, this};
+    auto failure_detection = std::thread{failure_detection_thread, this};
+
+
 
     accepter_clients.join();
     accepter_servers.join();
     cleaner_clients.join();
+    accepter_cntrl_servers.join();
+    failure_detection.join();
 }
 
 void ReplicationServer::acceptServersThread() {
     while( true ) {
         auto sync_manager = std::unique_ptr<SyncManager>( new SyncManager{server_listen_port, 
 														      SyncManager::SyncMode::Primary});
+
+        peers_info_mutex.lock();
+        {
+            std::ofstream ofs{"users/peers.info", std::ios::binary | std::ios::app };
+            //S - ip port
+            ofs << "ServerSync _ " << std::hex << sync_manager->getPeerIP() << " " 
+                << sync_manager->getPeerPort() << std::endl;
+        }
+        peers_info_mutex.unlock();
+
         server_syncd_mutex.lock();
         server_syncd.push_back( std::move(sync_manager) );
         server_syncd_mutex.unlock();
@@ -67,6 +109,17 @@ void ReplicationServer::acceptClientsThread() {
     while( true ) {
         auto sync_manager = std::unique_ptr<SyncManager>( new SyncManager{client_listen_port, 
 														      SyncManager::SyncMode::Server});
+
+        peers_info_mutex.lock();
+        {
+            std::ofstream ofs{"users/peers.info", std::ios::binary | std::ios::app };
+            //C username ip port
+            ofs << "Client " << sync_manager->getUsername() << " "
+                << std::hex << sync_manager->getPeerIP() << " " 
+                << sync_manager->getPeerPort() << std::endl; 
+        }
+        peers_info_mutex.unlock();
+
         client_syncd_mutex.lock();
         client_syncd.push_back( std::move(sync_manager) );
         client_syncd_mutex.unlock();
@@ -76,7 +129,7 @@ void ReplicationServer::acceptClientsThread() {
 void ReplicationServer::cleanClientsThread() {
     while(true) {
         client_syncd_mutex.lock();
-        for( int i=0; i<client_syncd.size(); i++ ) {
+        for( uint32_t i=0; i<client_syncd.size(); i++ ) {
             if( !client_syncd[i]->alive() ) {
                 std::cerr << "Dropped connection\n";
                 client_syncd.erase( client_syncd.begin() + i );
@@ -86,6 +139,84 @@ void ReplicationServer::cleanClientsThread() {
         client_syncd_mutex.unlock();
         std::this_thread::sleep_for( std::chrono::milliseconds( 200 ) );
     }
+}
+
+void ReplicationServer::acceptCtrlThread()
+{
+    while( true ) {
+        if(state== ServerState::Primary){
+            std::cout << "primary listening on " << ctrl_port << std::endl;
+            auto conn = std::shared_ptr<Connection> (Connection::listen (ctrl_port));
+
+            peers_info_mutex.lock();
+            {
+                std::ofstream ofs{"users/peers.info", std::ios::binary | std::ios::app };
+                ofs << "ServerConn _ " << std::hex << conn->getPeerIP() << " " << conn->getPeerPort() << std::endl; 
+            }
+            peers_info_mutex.unlock();
+
+            cntrl_conns_mutex.lock();
+            cntrl_conns.push_back( std::move(conn) );
+            cntrl_conns_mutex.unlock();
+        }else{
+            std::this_thread::sleep_for( std::chrono::seconds(1));
+        }
+    }
+}
+
+
+void ReplicationServer::failureDetectionThread()
+{
+    while(true){
+        if(state == ServerState::Replication){
+            Message ping_msg{MessageType::PING_REQUEST, "", 0};
+            std::shared_ptr<Connection> conn;
+
+            cntrl_conns_mutex.lock();
+            conn= cntrl_conns[0];
+            cntrl_conns_mutex.unlock();
+
+            try{
+                conn->send((uint8_t*)&ping_msg, sizeof(Message));
+
+                ReceivedData response = conn->receive( 5000 );
+                if( response.length == 0 ) {
+                    std::cout << "No response: timed out. Begin Election\n";
+                    //TODO: state= ServerState::Electing;
+
+                } else {
+                    Message* msg = (Message*)response.data.get();
+                    if( msg->type == MessageType::PING_RESPONSE ) {
+
+                    } else {
+                        std::cout << "Got unexpected Response(type: " << (uint8_t)msg->type << ")." << std::endl;
+                    }
+                }
+            }catch(std::exception& e){
+                std::cout << "No response: timed out on send. Begin Election\n";
+                //TODO: state= ServerState::Electing;
+            }
+
+            std::this_thread::sleep_for( std::chrono::seconds( 2 ) );
+
+		}else if(state == ServerState::Primary){
+            cntrl_conns_mutex.lock();
+            for(auto conn : cntrl_conns){
+                if(conn->hasNewMessage()){
+                    ReceivedData recvd= conn->receive();
+                    Message* msg = (Message*)recvd.data.get();
+                    if( msg->type == MessageType::PING_REQUEST ) {
+                        Message ping_msg{MessageType::PING_RESPONSE, "", 0};
+                        conn->send((uint8_t*)&ping_msg, sizeof(Message));
+
+                    } else {
+                        std::cout << "Got unexpected Message(type: " << (uint8_t)msg->type << ")." << std::endl;
+                    }
+                }
+            }
+            cntrl_conns_mutex.unlock();
+        }
+	}
 }
 
 
@@ -99,14 +230,10 @@ ReplicationServer::ReplicationServer()
 	_thread_failure_detection= new std::thread{ failure_detection_thread_starter, this};
 }
 
-void failure_detection_thread_starter(ReplicatedServer *rm)
-{
-	rm->failure_detection_thread()
-}
 
-void ReplicationServer::failure_detection_thread()
+void ReplicationServer::failureDetectionThread()
 {
-	if(!isPrimaryRM){
+	if(status == State::Replication){
 		while(true){
             std::unique_lock<std::mutex> lck (failure_detection_mutex);
             while(!gotRMMessage){

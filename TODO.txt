@@ -8,8 +8,9 @@
 |        |   - Réplicas:                                                                                            |
 |        |       6 - SyncManager ouvindo (watcher) todos usuários para cada réplica conectada no primário           |
 |  DONE  |       7 - thread de aceitação de novos replicadores (primário)                                           |
-|  0%    |       8 - thread de i'm alive enviando informações de clientes e réplicas (primário)                     |
-|  0%    |       9 - thread de detecção de falhas do primário (réplicas)                                            |
+|  DONE  |         7.1 - atualização do arquivo users.info com informacoes de todo mundo                            |
+|  DONE  |       8 - SyncManager 'global' enviando arquivo users.info                                               |
+|  DONE  |       9 - thread de detecção de falhas do primário (réplicas)                                            |
 |        |                                                                                                          |
 |        |   10 - Implementar algoritmo de eleição (disparado pelo thread detector de falhas)                       |
 |        |      11 - Após eleição, enviar mensagem de troca de primário para clientes (pelo connection)             |
@@ -26,6 +27,6 @@
 
 
 Mateus: 1,4
-Ricardo: 13,7-9,11
+Ricardo: 13,7-9,11 , 7.1
 Trivial: 3,14,6
 A ver: 10 2 12

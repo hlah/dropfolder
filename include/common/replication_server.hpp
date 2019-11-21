@@ -7,15 +7,18 @@
 #include <condition_variable> // std::condition_variable, std::cv_status
 #include <vector>
 
+
+enum class ServerState: uint8_t{
+    Primary=0,
+    Replication,
+    Electing
+};
+
+
 class ReplicationServer
 {
-    enum class State{
-        Primary,
-        Replication,
-        Electing
-    };
 private:
-    State status;
+    ServerState state;
 
 	//manage clients
 	uint16_t client_listen_port;
@@ -30,28 +33,37 @@ private:
 	//replicatedServer connection with primary
 	std::unique_ptr<SyncManager> primary_sync;
 
+    //primary ctrl connections with replicated servers
+    std::mutex cntrl_conns_mutex;
+    std::vector<std::shared_ptr<Connection>> cntrl_conns;
+
+    std::mutex peers_info_mutex;
+
+    uint16_t ctrl_port;
+    std::string p_addr;
+    uint16_t p_ctrl_port;
 
 //	std::thread _thread_alive;
 //	std::mutex RM_group_add_mutex;
 //	std::vector<std::unique_ptr<SyncManager>> RM_group;
 //	std::condition_variable failure_detection_cv;
-//    std::mutex failure_detection_mutex;
-//	ReplicationServer();
+    std::mutex failure_detection_mutex;
 
 //	bool gotPrimaryRMMessage;
 public:
 
-	ReplicationServer(uint16_t c_port, uint16_t s_port);
-	ReplicationServer(uint16_t c_port, uint16_t s_port, const std::string& p_addr, int p_port);
+	ReplicationServer(uint16_t c_port, uint16_t s_port, uint16_t ctrl_port);
+
+    ReplicationServer(uint16_t c_port, uint16_t s_port, uint16_t ctrl_port, const std::string& p_addr, int p_sync_port, uint16_t p_ctrl_port);
 
 	void acceptClientsThread();
 	void acceptServersThread();
+	void acceptCtrlThread();
 	void cleanClientsThread();
-
+    void failureDetectionThread();
 	
 
 //	void ImAlive_thread();
-//	void failure_detection_thread();
 //	void RMAddToGroup_thread();
 
 	const static int FailureDetectionTimeout = 6;

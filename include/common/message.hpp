@@ -14,8 +14,8 @@ enum class MessageType {
     REQUEST_FILE_LIST,
     FILE_LIST,
     DROP,
-    GROUP_INFO_REQUEST,
-    GROUP_INFO_REPLY
+    PING_REQUEST,
+	PING_RESPONSE
 };
 
 struct Message {
