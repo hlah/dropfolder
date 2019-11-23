@@ -37,6 +37,8 @@ ReplicationServer::ReplicationServer(uint16_t c_port, uint16_t s_port, uint16_t 
 	this->server_listen_port= s_port;
     this->ctrl_port= ctrl_port;
 
+    std::remove("users/peers.info");
+
     auto accepter_clients = std::thread{accept_clients_thread, this};
     auto accepter_servers = std::thread{accept_servers_thread, this};
     auto cleaner_clients = std::thread{clean_thread, this};
@@ -90,12 +92,19 @@ void ReplicationServer::acceptServersThread() {
         auto sync_manager = std::unique_ptr<SyncManager>( new SyncManager{server_listen_port, 
 														      SyncManager::SyncMode::Primary});
 
+		//TODO: use condition variable, busy waiting sucks
+		while(sync_manager->isWatchingDir()==false){};
+
         peers_info_mutex.lock();
         {
             std::ofstream ofs{"users/peers.info", std::ios::binary | std::ios::app };
             //S - ip port
             ofs << "ServerSync _ " << std::hex << sync_manager->getPeerIP() << " " 
                 << sync_manager->getPeerPort() << std::endl;
+			
+			std::cout << "ServerSync _ " << std::hex << sync_manager->getPeerIP() << " " 
+                << sync_manager->getPeerPort() << std::endl;
+
         }
         peers_info_mutex.unlock();
 
@@ -110,11 +119,18 @@ void ReplicationServer::acceptClientsThread() {
         auto sync_manager = std::unique_ptr<SyncManager>( new SyncManager{client_listen_port, 
 														      SyncManager::SyncMode::Server});
 
+		//TODO: use condition variable, busy waiting sucks
+		while(sync_manager->isWatchingDir()==false){};
+
         peers_info_mutex.lock();
         {
             std::ofstream ofs{"users/peers.info", std::ios::binary | std::ios::app };
             //C username ip port
             ofs << "Client " << sync_manager->getUsername() << " "
+                << std::hex << sync_manager->getPeerIP() << " " 
+                << sync_manager->getPeerPort() << std::endl; 
+
+			std::cout << "Client " << sync_manager->getUsername() << " "
                 << std::hex << sync_manager->getPeerIP() << " " 
                 << sync_manager->getPeerPort() << std::endl; 
         }
@@ -152,6 +168,8 @@ void ReplicationServer::acceptCtrlThread()
             {
                 std::ofstream ofs{"users/peers.info", std::ios::binary | std::ios::app };
                 ofs << "ServerConn _ " << std::hex << conn->getPeerIP() << " " << conn->getPeerPort() << std::endl; 
+
+				std::cout << "ServerConn _ " << std::hex << conn->getPeerIP() << " " << conn->getPeerPort() << std::endl; 
             }
             peers_info_mutex.unlock();
 

@@ -68,8 +68,16 @@ std::shared_ptr<Connection> Connection::listen(int port, int min_range, int max_
     server_addr.sin_addr.s_addr = INADDR_ANY;
     bzero(&(server_addr).sin_zero, 8);
 
+	int enable = 1;
+	if (setsockopt(socketfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0){
+		throw_errno("setsockopt(SO_REUSEADDR) failed");;
+	}
+
     if( bind( socketfd, (sockaddr*)&server_addr, sizeof(server_addr) ) == -1) {
-        throw_errno("Could not bind socket");
+		std::string err_msg{"Could not bind socket(1), port: "};
+		err_msg +=std::to_string(port);
+        throw_errno(err_msg.c_str());
+        //throw_errno("Could not bind socket(1)");
     }
 
 	Packet packet;
@@ -107,7 +115,7 @@ std::shared_ptr<Connection> Connection::listen(int port, int min_range, int max_
 
 
     if( current_port > max_range ) {
-        throw_errno("Could not bind socket");
+        throw_errno("Could not bind socket(2)");
     }
 
     int tries = 3;

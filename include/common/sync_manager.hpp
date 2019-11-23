@@ -50,7 +50,7 @@ class SyncManager {
 		std::string getUsername() { return username;}
 
 		void syncThread(void);
-
+		bool isWatchingDir(){return watchingDir;}
 
     private:
 		std::string sync_dir;
@@ -59,6 +59,7 @@ class SyncManager {
 		SyncMode operationMode;
         std::mutex username_mutex;
         std::condition_variable username_cv;
+		bool watchingDir;
 
 		void send_file(std::string filepath);
 		void delete_file( std::string filepath);

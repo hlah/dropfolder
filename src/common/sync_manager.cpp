@@ -30,6 +30,7 @@ SyncManager::SyncManager(
 	this->username= username;
 	this->client_mode  = true;
 	this->operationMode = SyncMode::Client;
+	this->watchingDir= false;
 
     _thread = std::shared_ptr<std::thread>{ new std::thread{ 
         sync_thread, 
@@ -47,6 +48,7 @@ SyncManager::SyncManager(
 	this->username= std::string{};
 	this->client_mode  = true;
 	this->operationMode = SyncMode::Replicated;
+	this->watchingDir= false;
 
     std::cout << "host port: " << _conn->getPort() << std::endl;
 
@@ -63,6 +65,7 @@ SyncManager::SyncManager( int port, SyncMode mode)
 	username = std::string{};
 	this->client_mode = false;
 	this->operationMode = mode;
+	this->watchingDir= false;
 
     _thread = std::shared_ptr<std::thread>{ new std::thread{ 
         sync_thread, 
@@ -70,9 +73,9 @@ SyncManager::SyncManager( int port, SyncMode mode)
     }};
 
     if(mode==SyncMode::Server){
-        std::cout << "willl block!" << std::endl;
         std::unique_lock<std::mutex> lck (username_mutex);
         while(getUsername()==""){
+			std::cout << "will block waiting for username!" << std::endl;
             username_cv.wait(lck);
         }
     }
@@ -137,7 +140,7 @@ void SyncManager::syncThread() {
                 //filename= zip(sync_dir);
                 //send_file( filename);
 
-                send_files( std::string{"users/"}, std::string{"./*"}, std::string{"users"});
+                send_files( std::string{"./"}, std::string{"users/*"}, std::string{"users"});
                 print_msg( std::string{"synching '"} + sync_dir + std::string{"'"}, client_mode );
             }
             break;
@@ -154,8 +157,11 @@ void SyncManager::syncThread() {
                 mkdir(sync_dir.c_str(), 0777);
          
                 if(msg->type == MessageType::UPDATE_FILES){
+					{
+						std::cout << "msg->filename: " << msg->filename << "." << std::endl;
                         std::ofstream ofs{ msg->filename , std::ios::binary | std::ios::trunc };
                         ofs.write( msg->bytes, msg->file_length );
+					}
                         get_files( msg->filename );
                 }else{
                     std::cout << "unexpected message. expecting "
@@ -166,7 +172,6 @@ void SyncManager::syncThread() {
                 print_msg( std::string{"synching '"} + sync_dir + std::string{"'"}, client_mode );
             }
             break;
-		//TODO: Sync between primary and replica servers
 	}
 
     // create dir TODO check if already exits and if was sucessful
@@ -180,6 +185,7 @@ void SyncManager::syncThread() {
     }else{
         watcher.add_dir( sync_dir );
     }
+	this->watchingDir= true;
 
     std::vector<std::string> ignore;
 

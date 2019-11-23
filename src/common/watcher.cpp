@@ -30,7 +30,7 @@ void Watcher::add_dir(const std::string& dir_name, unsigned int recurse) {
     const auto flags = IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_TO | IN_MOVED_FROM;
     auto wd = inotify_add_watch(_fd, dir_name.c_str(), flags);
     if ( wd < 0 ) {
-        throw WatcherException{ std::string{ strerror(errno) } };
+        throw WatcherException{ std::string{ strerror(errno) } + std::string{". dir_name:"}+dir_name };
     }
     if( recurse > 0 ) {
         for( const auto& subdir : listdir( dir_name, true ) ) {
