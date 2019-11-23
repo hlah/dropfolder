@@ -62,6 +62,7 @@ class SyncManager {
 		bool watchingDir;
 
 		void send_file(std::string filepath);
+		void new_dir(std::string filepath);
 		void delete_file( std::string filepath);
 		void send_files( const std::string& root_dir, const std::string& files, const std::string name );
 		void get_files( const std::string& file );

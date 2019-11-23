@@ -7,6 +7,7 @@ enum class MessageType {
     DELETE_FILE,
     UPDATE_FILE,
     UPDATE_FILES,
+    NEW_DIRECTORY,
     USERNAME,
     USERNAME_NOSYNC,
     REQUEST_FILE,

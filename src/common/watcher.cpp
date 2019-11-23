@@ -70,6 +70,9 @@ Watcher::Event Watcher::next() {
             if( event_ptr->mask & (IN_CREATE | IN_MOVED_TO) && !(event_ptr->mask & IN_ISDIR) ) {
                 Event event{ Watcher::EventType::CREATED, full_name };
                 _event_queue.push(event);
+            } else if( event_ptr->mask & (IN_CREATE | IN_MOVED_TO) && (event_ptr->mask & IN_ISDIR) ) {
+                Event event{ Watcher::EventType::NEW_DIRECTORY, full_name };
+                _event_queue.push(event);
             } else if( event_ptr->mask & IN_MODIFY && !(event_ptr->mask & IN_ISDIR) ) {
                 Event event{ Watcher::EventType::MODIFIED, full_name };
                 _event_queue.push(event);

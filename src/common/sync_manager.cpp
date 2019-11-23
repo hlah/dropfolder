@@ -202,8 +202,10 @@ void SyncManager::syncThread() {
             switch(event.type) {
                 case Watcher::EventType::MODIFIED:
                 case Watcher::EventType::CREATED:
-                    std::cerr << "Sending " << event.filename << std::endl;
                     send_file( event.filename );
+                    break;
+                case Watcher::EventType::NEW_DIRECTORY:
+                    new_dir( event.filename );
                     break;
                 case Watcher::EventType::REMOVED:
                     delete_file( event.filename);
@@ -241,6 +243,10 @@ void SyncManager::syncThread() {
 
                     get_files( message->filename );
                     watcher.discard();
+                    break;
+                case MessageType::NEW_DIRECTORY:
+                    mkdir( filepath.c_str(), 0777 );
+                    print_msg(std::string{"Created "} + filepath + std::string{" directory localy."}, client_mode);
                     break;
                 case MessageType::REQUEST_FILE:
                     send_file( message->filename);
@@ -307,6 +313,19 @@ void SyncManager::send_file(std::string filepath)
     }
 }
 
+void SyncManager::new_dir(std::string filepath) {
+    // remove sync_dir prefix
+    std::string filename{ filepath, sync_dir.size()+1 };
+
+    Message msg;
+    msg.type = MessageType::NEW_DIRECTORY;
+    std::strncpy( msg.filename, filename.c_str(), MESSAGE_MAX_FILENAME_SIZE );
+    msg.file_length = 0;
+
+    _conn->send( (uint8_t*)&msg, sizeof(Message) );
+    print_msg( std::string{"created new directory "} + filename + std::string{" remotely"}, client_mode );
+}
+
 void SyncManager::delete_file( std::string filepath)
 {
     // remove sync_dir prefix
@@ -317,7 +336,7 @@ void SyncManager::delete_file( std::string filepath)
     std::strncpy( msg.filename, filename.c_str(), MESSAGE_MAX_FILENAME_SIZE );
     msg.file_length = 0;
 
-    /// TODO send msg through connection
+    /// send msg through connection
     _conn->send( (uint8_t*)&msg, sizeof(Message) );
 
     print_msg( std::string{"deleted "} + filename + std::string{" remotely"}, client_mode );
@@ -359,6 +378,7 @@ void SyncManager::send_files( const std::string& root_dir, const std::string& fi
     std::remove( name_ext.c_str() );
     delete[] msg;
 }
+
 
 void SyncManager::get_files( const std::string& file ) {
     std::string command 

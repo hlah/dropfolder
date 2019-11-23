@@ -13,6 +13,7 @@ class Watcher {
             MODIFIED,
             REMOVED,
             CREATED,
+            NEW_DIRECTORY,
             UNKNOWKN,
             NOEVENT,
         };
