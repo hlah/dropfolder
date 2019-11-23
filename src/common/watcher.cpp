@@ -29,13 +29,18 @@ Watcher::~Watcher() {
 void Watcher::add_dir(const std::string& dir_name, unsigned int recurse) {
     const auto flags = IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_TO | IN_MOVED_FROM;
     auto wd = inotify_add_watch(_fd, dir_name.c_str(), flags);
+    std::cerr << "Watching " << dir_name << std::endl;
     if ( wd < 0 ) {
-        throw WatcherException{ std::string{ strerror(errno) } + std::string{". dir_name:"}+dir_name };
+        throw WatcherException{ std::string{ strerror(errno) } + std::string{". dir_name: "}+dir_name };
     }
     if( recurse > 0 ) {
         for( const auto& subdir : listdir( dir_name, true ) ) {
-            auto subdir_path = dir_name + std::string{"/"} + subdir;
-            add_dir( subdir_path, recurse-1 );
+            if( subdir != std::string{".."} && subdir != std::string{"."} ) {
+                auto subdir_path = dir_name + std::string{"/"} + subdir;
+                Event event{ Watcher::EventType::NEW_DIRECTORY, subdir_path };
+                _event_queue.push(event);
+                add_dir( subdir_path, recurse-1 );
+            }
         }
     }
     _dir_map[dir_name] = wd;
@@ -73,16 +78,15 @@ Watcher::Event Watcher::next() {
             } else if( event_ptr->mask & (IN_CREATE | IN_MOVED_TO) && (event_ptr->mask & IN_ISDIR) ) {
                 Event event{ Watcher::EventType::NEW_DIRECTORY, full_name };
                 _event_queue.push(event);
+                if( _dir_depths[ event_ptr->wd ] > 0 ) {
+                    add_dir( full_name, _dir_depths[ event_ptr->wd ]-1 );
+                }
             } else if( event_ptr->mask & IN_MODIFY && !(event_ptr->mask & IN_ISDIR) ) {
                 Event event{ Watcher::EventType::MODIFIED, full_name };
                 _event_queue.push(event);
             } else if( event_ptr->mask & (IN_DELETE | IN_MOVED_FROM) && !(event_ptr->mask & IN_ISDIR) ) {
                 Event event{ Watcher::EventType::REMOVED, full_name };
                 _event_queue.push(event);
-            } else if( event_ptr->mask & (IN_CREATE | IN_MOVED_TO) && (event_ptr->mask & IN_ISDIR) ) {
-                if( _dir_depths[ event_ptr->wd ] > 0 ) {
-                    add_dir( full_name, _dir_depths[ event_ptr->wd ]-1 );
-                }
             } 
 
             i += sizeof(inotify_event) + event_ptr->len;

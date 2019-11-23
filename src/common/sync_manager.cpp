@@ -89,6 +89,8 @@ SyncManager::~SyncManager() {
 }
 
 void SyncManager::syncThread() {
+    Watcher watcher;
+
 	switch(operationMode)
 	{
         case SyncMode::Client:
@@ -100,7 +102,7 @@ void SyncManager::syncThread() {
                 std::strcpy(msg.filename, username.c_str());
                 msg.file_length = 0;
                 _conn->send( (uint8_t*)&msg, sizeof(Message) );
-                print_msg( std::string{"synching '"} + sync_dir + std::string{"'"}, client_mode );
+                print_msg( std::string{"CLIENT synching '"} + sync_dir + std::string{"'"}, client_mode );
             }
             break;
         case SyncMode::Server:
@@ -119,7 +121,7 @@ void SyncManager::syncThread() {
                     mkdir(sync_dir.c_str(), 0777);
                     // send all files
                     send_files( std::string{"users/"}+username, std::string{"sync_dir"}, username );
-                    print_msg( std::string{"synching '"} + sync_dir + std::string{"'"}, client_mode );
+                    print_msg( std::string{"SERVER synching '"} + sync_dir + std::string{"'"}, client_mode );
                 }else{
                     std::cout << "unexpected message. expecting "
                               << (uint8_t)MessageType::USERNAME
@@ -140,8 +142,8 @@ void SyncManager::syncThread() {
                 //filename= zip(sync_dir);
                 //send_file( filename);
 
-                send_files( std::string{"./"}, std::string{"users/*"}, std::string{"users"});
-                print_msg( std::string{"synching '"} + sync_dir + std::string{"'"}, client_mode );
+                send_files( std::string{"./"}, std::string{"users"}, std::string{"users"});
+                print_msg( std::string{"PRIMARY synching '"} + sync_dir + std::string{"'"}, client_mode );
             }
             break;
         case SyncMode::Replicated:
@@ -169,7 +171,7 @@ void SyncManager::syncThread() {
                               << "came" << (uint8_t)msg->type << std::endl;
                 }
 
-                print_msg( std::string{"synching '"} + sync_dir + std::string{"'"}, client_mode );
+                print_msg( std::string{"REPLICATED synching '"} + sync_dir + std::string{"'"}, client_mode );
             }
             break;
 	}
@@ -177,11 +179,9 @@ void SyncManager::syncThread() {
     // create dir TODO check if already exits and if was sucessful
     mkdir(sync_dir.c_str(), 0777);
 
-    Watcher watcher;
-    std::cerr << "Watching " << sync_dir << std::endl;
     if(operationMode == SyncMode::Primary ||
        operationMode == SyncMode::Replicated){ 
-        watcher.add_dir( sync_dir, 1);
+        watcher.add_dir( sync_dir, 2);
     }else{
         watcher.add_dir( sync_dir );
     }
@@ -345,11 +345,10 @@ void SyncManager::delete_file( std::string filepath)
 
 
 void SyncManager::send_files( const std::string& root_dir, const std::string& files, const std::string name ) {
-    auto current_dir = std::string( get_current_dir_name() );
-    chdir( root_dir.c_str() );
     std::string name_ext = name + std::string{".tar.gz"};
     std::string command 
-        = std::string{"tar -czf "} 
+        = std::string{"tar  -C "} + root_dir
+        + std::string{" -czf "} 
         + name_ext
         + std::string{" "}
         + files;
@@ -374,7 +373,6 @@ void SyncManager::send_files( const std::string& root_dir, const std::string& fi
 
     print_msg(std::string{"Updated "} + name_ext + std::string{" remotely. ("} + std::to_string(length) + std::string{" bytes)"}, client_mode);
 
-    chdir( current_dir.c_str() );
     std::remove( name_ext.c_str() );
     delete[] msg;
 }
