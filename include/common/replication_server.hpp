@@ -1,9 +1,11 @@
 #ifndef _DROPFOLDER_REPLICATION_SERVER
 #define _DROPFOLDER_REPLICATION_SERVER
 
+#include "sync_manager.hpp"
+#include "barrier.hpp"
+
 #include <thread>
 #include <mutex>              // std::mutex, std::unique_lock
-#include "sync_manager.hpp"
 #include <condition_variable> // std::condition_variable, std::cv_status
 #include <vector>
 
@@ -42,6 +44,9 @@ private:
     uint16_t ctrl_port;
     std::string p_addr;
     uint16_t p_ctrl_port;
+
+    // barrier to make server wait replication synchronization before sync clients
+    std::shared_ptr<Barrier> _sync_barrier;
 
 //	std::thread _thread_alive;
 //	std::mutex RM_group_add_mutex;

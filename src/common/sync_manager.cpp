@@ -58,9 +58,10 @@ SyncManager::SyncManager(
     }};
 }
 
-SyncManager::SyncManager( int port, SyncMode mode)
+SyncManager::SyncManager( int port, std::shared_ptr<Barrier> barrier, SyncMode mode)
     : _stop{ new bool{false} },
-      _conn{ Connection::listen( port ) }
+      _conn{ Connection::listen( port ) },
+      _sync_barrier{ barrier }
 {
 	username = std::string{};
 	this->client_mode = false;
@@ -85,6 +86,13 @@ SyncManager::~SyncManager() {
     if( _thread.unique() ) {
         *_stop = true;
         _thread->join();
+        if( _sync_barrier ) {
+            if( operationMode == SyncMode::Server ) {
+                _sync_barrier->remove_client( username );
+            } else {
+                _sync_barrier->remove_replica();
+            }
+        }
     }
 }
 
@@ -186,6 +194,13 @@ void SyncManager::syncThread() {
         watcher.add_dir( sync_dir );
     }
 	this->watchingDir= true;
+    if( _sync_barrier ) {
+        if( operationMode == SyncMode::Server ) {
+            _sync_barrier->add_client( username );
+        } else {
+            _sync_barrier->add_replica();
+        }
+    }
 
     std::vector<std::string> ignore;
 
@@ -194,25 +209,43 @@ void SyncManager::syncThread() {
         // check for sync dir modification
         auto event = watcher.next();
 
-        auto ignore_it = std::find( ignore.begin(), ignore.end(), event.filename );
-        // ingore files received by the server
-        if( ignore_it != ignore.end() ) {
-            ignore.erase( ignore_it );
-        } else {
-            switch(event.type) {
-                case Watcher::EventType::MODIFIED:
-                case Watcher::EventType::CREATED:
-                    send_file( event.filename );
-                    break;
-                case Watcher::EventType::NEW_DIRECTORY:
-                    new_dir( event.filename );
-                    break;
-                case Watcher::EventType::REMOVED:
-                    delete_file( event.filename);
-                    break;
-                default:
-                    break;
+        while( event.type != Watcher::EventType::NOEVENT ) {
+            // replica/client synchronization synchronization
+            if( operationMode == SyncMode::Server ) {
+                _sync_barrier->client_synching( this->username );
+            } else if( operationMode == SyncMode::Primary ) {
+                _sync_barrier->replica_synching( event.filename );
             }
+
+            auto ignore_it = std::find( ignore.begin(), ignore.end(), event.filename );
+            // ingore files received by the server
+            if( ignore_it != ignore.end() ) {
+                ignore.erase( ignore_it );
+            } else {
+                switch(event.type) {
+                    case Watcher::EventType::MODIFIED:
+                    case Watcher::EventType::CREATED:
+                        send_file( event.filename );
+                        break;
+                    case Watcher::EventType::NEW_DIRECTORY:
+                        new_dir( event.filename );
+                        break;
+                    case Watcher::EventType::REMOVED:
+                        delete_file( event.filename);
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            // replica/client synchronization synchronization finish
+            if( operationMode == SyncMode::Server ) {
+                _sync_barrier->client_finished( this->username );
+            } else if( operationMode == SyncMode::Primary ) {
+                _sync_barrier->replica_finished( event.filename );
+            }
+
+            event = watcher.next();
         }
 
         // TODO get messages from server

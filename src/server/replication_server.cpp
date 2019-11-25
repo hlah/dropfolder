@@ -37,6 +37,8 @@ ReplicationServer::ReplicationServer(uint16_t c_port, uint16_t s_port, uint16_t 
 	this->server_listen_port= s_port;
     this->ctrl_port= ctrl_port;
 
+    _sync_barrier.reset( new Barrier{} );
+
     std::remove("users/peers.info");
 
     auto accepter_clients = std::thread{accept_clients_thread, this};
@@ -44,7 +46,6 @@ ReplicationServer::ReplicationServer(uint16_t c_port, uint16_t s_port, uint16_t 
     auto cleaner_clients = std::thread{clean_thread, this};
     auto accepter_cntrl_servers = std::thread{accept_ctrl_thread, this};
     auto failure_detection = std::thread{failure_detection_thread, this};
-
 
     accepter_clients.join();
     accepter_servers.join();
@@ -89,8 +90,13 @@ ReplicationServer::ReplicationServer(uint16_t c_port, uint16_t s_port, uint16_t 
 
 void ReplicationServer::acceptServersThread() {
     while( true ) {
-        auto sync_manager = std::unique_ptr<SyncManager>( new SyncManager{server_listen_port, 
-														      SyncManager::SyncMode::Primary});
+        auto sync_manager = std::unique_ptr<SyncManager>(
+                new SyncManager{
+                    server_listen_port, 
+                    _sync_barrier,
+                    SyncManager::SyncMode::Primary
+                }
+        );
 
 		//TODO: use condition variable, busy waiting sucks
 		while(sync_manager->isWatchingDir()==false){};
@@ -116,8 +122,13 @@ void ReplicationServer::acceptServersThread() {
 
 void ReplicationServer::acceptClientsThread() {
     while( true ) {
-        auto sync_manager = std::unique_ptr<SyncManager>( new SyncManager{client_listen_port, 
-														      SyncManager::SyncMode::Server});
+        auto sync_manager = std::unique_ptr<SyncManager>( 
+                new SyncManager{
+                    client_listen_port, 
+                    _sync_barrier,
+                    SyncManager::SyncMode::Server
+                }
+        );
 
 		//TODO: use condition variable, busy waiting sucks
 		while(sync_manager->isWatchingDir()==false){};

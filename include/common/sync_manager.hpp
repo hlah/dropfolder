@@ -3,6 +3,7 @@
 
 #include "watcher.hpp"
 #include "connection.hpp"
+#include "barrier.hpp"
 #include <mutex>
 #include <condition_variable>
 
@@ -31,7 +32,7 @@ class SyncManager {
         );
 
         /// Start server or primary syncroniztion
-        SyncManager( int port, SyncMode mode= SyncMode::Server);
+        SyncManager( int port, std::shared_ptr<Barrier> barrier, SyncMode mode= SyncMode::Server );
         SyncManager( SyncManager&& other ) = default;
 
         ~SyncManager();
@@ -60,6 +61,7 @@ class SyncManager {
         std::mutex username_mutex;
         std::condition_variable username_cv;
 		bool watchingDir;
+        std::shared_ptr<Barrier> _sync_barrier;
 
 		void send_file(std::string filepath);
 		void new_dir(std::string filepath);
