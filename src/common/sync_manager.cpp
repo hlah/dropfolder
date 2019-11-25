@@ -209,7 +209,7 @@ void SyncManager::syncThread() {
         // check for sync dir modification
         auto event = watcher.next();
 
-        while( event.type != Watcher::EventType::NOEVENT ) {
+        if( event.type != Watcher::EventType::NOEVENT && event.type != Watcher::EventType::UNKNOWKN ) {
             // replica/client synchronization synchronization
             if( operationMode == SyncMode::Server ) {
                 _sync_barrier->client_synching( this->username );
@@ -244,8 +244,6 @@ void SyncManager::syncThread() {
             } else if( operationMode == SyncMode::Primary ) {
                 _sync_barrier->replica_finished( event.filename );
             }
-
-            event = watcher.next();
         }
 
         // TODO get messages from server

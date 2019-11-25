@@ -21,20 +21,23 @@ class Barrier {
 
     private:
         std::mutex _mutex;
+
         unsigned int _replica_count = 0;
         std::map<std::string, unsigned int> _client_count;
+
+        enum class State {
+            NOT_SYNCHING,
+            SYNCHING_REPLICAS, 
+            SYNCHING_CLIENTS
+        };
+        State _state = State::NOT_SYNCHING;
+
         std::string _synching_user;
-        bool _synching = false;
+        unsigned int _synched_replicas_count = 0;
+        unsigned int _synched_clients_count = 0;
 
-        unsigned int _replicas_synched = 0;
-        unsigned int _clients_synched = 0;
-        unsigned int _replicas_waiting = 0;
-
-        std::condition_variable _wait_others_users_cv;
-        std::condition_variable _wait_for_replicas_cv;
-        std::condition_variable _wait_for_clients_cv;
         std::condition_variable _wait_not_synching_cv;
-        std::condition_variable _wait_for_replicas_stop_waiting_cv;
+        std::condition_variable _wait_synching_clients_cv;
 
         std::string get_user( const std::string& file );
 
