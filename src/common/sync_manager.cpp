@@ -246,6 +246,8 @@ void SyncManager::syncThread() {
             }
         }
 
+        std::this_thread::sleep_for( std::chrono::milliseconds(50) );
+
         // TODO get messages from server
         while( _conn->hasNewMessage()) {
             ReceivedData data = _conn->receive();
