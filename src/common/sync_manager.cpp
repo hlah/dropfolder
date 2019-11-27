@@ -24,7 +24,7 @@ SyncManager::SyncManager(
         int port, 
         const std::string& username
 ) : _stop{ new bool{false} },
-    _conn{ Connection::connect( addr, port ) }
+    _conn{ Connection::connect(ConnMode::Normal, addr, port ) }
     
 {
 	this->username= username;
@@ -42,7 +42,7 @@ SyncManager::SyncManager(
         const std::string& addr, 
         int port
 ) : _stop{ new bool{false} },
-    _conn{ Connection::connect( addr, port ) }
+    _conn{ Connection::connect(ConnMode::Normal, addr, port ) }
     
 {
 	this->username= std::string{};
@@ -56,7 +56,58 @@ SyncManager::SyncManager(
         sync_thread, 
 		this,
     }};
+
+	std::unique_lock<std::mutex> lck (username_mutex);
+	while(!watchingDir){
+		std::cout << "will block waiting for sync!" << std::endl;
+		username_cv.wait(lck);
+	}
 }
+
+
+SyncManager::SyncManager(SyncMode mode, std::shared_ptr<Connection> conn, std::string user_name)
+    : _stop{ new bool{false} },
+      _conn{ conn }
+{
+	username = user_name;
+	this->client_mode = false;
+	this->operationMode = mode;
+	this->watchingDir= false;
+
+    _thread = std::shared_ptr<std::thread>{ new std::thread{ 
+        sync_thread, 
+		this,
+    }};
+
+	std::unique_lock<std::mutex> lck (username_mutex);
+	while(!watchingDir){
+		std::cout << "will block waiting for sync!" << std::endl;
+		username_cv.wait(lck);
+	}
+}
+
+SyncManager::SyncManager(SyncMode mode, std::shared_ptr<Connection> conn)
+    : _stop{ new bool{false} },
+      _conn{ conn }
+{
+	username = std::string{};
+	this->client_mode = false;
+	this->operationMode = mode;
+	this->watchingDir= false;
+
+    _thread = std::shared_ptr<std::thread>{ new std::thread{ 
+        sync_thread, 
+		this,
+    }};
+
+	std::unique_lock<std::mutex> lck (username_mutex);
+	while(!watchingDir){
+		std::cout << "will block waiting for sync!" << std::endl;
+		username_cv.wait(lck);
+	}
+}
+
+
 
 SyncManager::SyncManager( int port, SyncMode mode)
     : _stop{ new bool{false} },
@@ -105,6 +156,9 @@ void SyncManager::syncThread() {
                 print_msg( std::string{"CLIENT synching '"} + sync_dir + std::string{"'"}, client_mode );
             }
             break;
+        case SyncMode::ServerReconstruction:
+            sync_dir = std::string{"users/"} + username + "/sync_dir";
+            break;
         case SyncMode::Server:
             // server mode, wait for client username
             {
@@ -129,6 +183,10 @@ void SyncManager::syncThread() {
                 }
             }
             break;
+        case SyncMode::PrimaryReconstruction:
+			sync_dir = "users";
+			break;
+
         case SyncMode::Primary:
             // Primary server mode, transmit all client directories
             {
@@ -179,7 +237,8 @@ void SyncManager::syncThread() {
     // create dir TODO check if already exits and if was sucessful
     mkdir(sync_dir.c_str(), 0777);
 
-    if(operationMode == SyncMode::Primary ||
+    if(operationMode == SyncMode::PrimaryReconstruction ||
+	   operationMode == SyncMode::Primary ||
        operationMode == SyncMode::Replicated){ 
         watcher.add_dir( sync_dir, 2);
     }else{
@@ -187,7 +246,19 @@ void SyncManager::syncThread() {
     }
 	this->watchingDir= true;
 
+    if( operationMode == SyncMode::Replicated ||
+        operationMode == SyncMode::PrimaryReconstruction || 
+        operationMode == SyncMode::ServerReconstruction){
+        username_cv.notify_one();
+    }
+
     std::vector<std::string> ignore;
+    if(operationMode == SyncMode::PrimaryReconstruction){
+	    operationMode = SyncMode::Primary;
+    }
+    if(operationMode == SyncMode::ServerReconstruction){
+	    operationMode = SyncMode::Server;
+    }
 
     bool dropped = false;
     while( !*_stop ) {
@@ -199,6 +270,9 @@ void SyncManager::syncThread() {
         if( ignore_it != ignore.end() ) {
             ignore.erase( ignore_it );
         } else {
+            if(event.type != Watcher::EventType::NOEVENT){
+                std::cout << event.type << std::endl;
+            }
             switch(event.type) {
                 case Watcher::EventType::MODIFIED:
                 case Watcher::EventType::CREATED:
@@ -267,6 +341,16 @@ void SyncManager::syncThread() {
                     *_stop = true;
                     break;
 
+				case MessageType::USERNAME:
+					{
+						// client mode, send username to the server
+						Message msg;
+						msg.type = MessageType::USERNAME;
+						std::strcpy(msg.filename, username.c_str());
+						msg.file_length = 0;
+						_conn->send( (uint8_t*)&msg, sizeof(Message) );
+					}
+
                 default:
                     break;
             }
@@ -275,8 +359,13 @@ void SyncManager::syncThread() {
     }
 
     if( !dropped ) {
+
         Message drop_msg{ MessageType::DROP, "", 0 };
-        _conn->send( (uint8_t*)&drop_msg, sizeof(Message) );
+        try{
+			_conn->send( (uint8_t*)&drop_msg, sizeof(Message) );
+		}catch(std::exception& e){
+			std::cout << "Caught exception, bye." << std::endl;
+		}
     }
 }
 
@@ -306,6 +395,7 @@ void SyncManager::send_file(std::string filepath)
 
         delete[] msg;
     } else {
+        std::cout << "sending MessageType::NO_SUCH_FILE" << std::endl;
         Message msg{MessageType::NO_SUCH_FILE};
         std::strncpy( msg.filename, filename.c_str(), MESSAGE_MAX_FILENAME_SIZE );
         msg.file_length = 0;

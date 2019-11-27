@@ -133,7 +133,7 @@ void upload_file(
         const std::string& server_addr, 
         int port 
         ) {
-    auto conn = Connection::connect( server_addr, port );
+    auto conn = Connection::connect(ConnMode::Normal, server_addr, port );
 
     // send username
     Message username_msg{ MessageType::USERNAME_NOSYNC };
@@ -166,7 +166,7 @@ void download_file(
         const std::string& server_addr, 
         int port 
         ) {
-    auto conn = Connection::connect( server_addr, port );
+    auto conn = Connection::connect(ConnMode::Normal, server_addr, port );
 
     // send username
     Message username_msg{ MessageType::USERNAME_NOSYNC };
@@ -203,7 +203,7 @@ void list_server(
         const std::string& server_addr, 
         int port 
         ) {
-    auto conn = Connection::connect( server_addr, port );
+    auto conn = Connection::connect(ConnMode::Normal, server_addr, port );
 
     // send username
     Message username_msg{ MessageType::USERNAME_NOSYNC };
@@ -236,7 +236,7 @@ void delete_file(
         const std::string& server_addr, 
         int port 
         ) {
-    auto conn = Connection::connect( server_addr, port );
+    auto conn = Connection::connect(ConnMode::Normal, server_addr, port );
 
     // send username
     Message username_msg{ MessageType::USERNAME_NOSYNC };

@@ -12,12 +12,13 @@
 #include <unistd.h>
 #include <vector>
 #include <chrono>
+#include <ifaddrs.h>
 
 #include <iostream>
 
 #define PAYLOAD_LEN 1024
 
-std::shared_ptr<Connection> Connection::connect(const std::string& hostname, int port, int timelimit) {
+std::shared_ptr<Connection> Connection::connect(ConnMode mode, const std::string& hostname, int port, int timelimit) {
     int socketfd = build_socket();
     auto host = get_host( hostname );
 
@@ -56,7 +57,7 @@ std::shared_ptr<Connection> Connection::connect(const std::string& hostname, int
         throw_errno("Could not send Ack packet");
     }
 
-    return std::shared_ptr<Connection>{new Connection{socketfd, addr, timelimit}};
+    return std::shared_ptr<Connection>{new Connection{mode, socketfd, addr, timelimit}};
 }
 
 std::shared_ptr<Connection> Connection::listen(int port, int min_range, int max_range, int timelimit) {
@@ -139,8 +140,88 @@ std::shared_ptr<Connection> Connection::listen(int port, int min_range, int max_
 		throw ConnectionException{ "Could not receive ack" };
 	}
 
-    return std::shared_ptr<Connection>{new Connection{socketfd, client_addr, timelimit}};
+    return std::shared_ptr<Connection>{new Connection{ConnMode::Normal, socketfd, client_addr, timelimit}};
 }
+
+
+
+std::shared_ptr<Connection> Connection::reconnect(ConnMode mode, uint32_t peerIP, uint16_t peerPort, int min_range, int max_range, int timelimit) {
+
+//	std::cout << "RECONNECT" <<std::endl;
+	sockaddr_in server_addr;
+
+	sockaddr_in dest_addr;
+//	socklen_t dest_addr_size = sizeof(sockaddr_in);
+
+    dest_addr.sin_family = AF_INET;
+    dest_addr.sin_port = htons(peerPort);
+    dest_addr.sin_addr.s_addr = htonl(peerIP);
+    bzero(&(dest_addr).sin_zero, 8);
+    
+    int socketfd;
+    // create new socket for connection maintenance
+    int current_port = min_range;
+    while( current_port <= max_range ) {
+        socketfd = build_socket();
+        server_addr.sin_family = AF_INET;
+        server_addr.sin_port = htons(current_port);
+        server_addr.sin_addr.s_addr = INADDR_ANY;
+        bzero(&(server_addr).sin_zero, 8);
+
+        if( bind( socketfd, (sockaddr*)&server_addr, sizeof(server_addr) ) == 0 ) {
+            break;
+        } 
+
+        close(socketfd);
+        current_port++;
+    }
+
+    if( current_port > max_range ) {
+        throw_errno("Could not bind socket(2)");
+    }
+
+    Packet packet{ PacketType::ChangeServerAddr};
+
+    int tries=3;
+    while(tries>0){
+        if( sendto( socketfd, (const void*)&packet, sizeof(Packet), 0, (sockaddr*)&dest_addr, sizeof(sockaddr_in) ) == -1) {
+            std::cout << "error sending packet(1)" << std::endl;
+            
+        }else{
+            sockaddr_in sender_addr;
+            socklen_t sender_addr_len= sizeof(sockaddr_in);
+
+            /* receive from socket */
+            if(poll_socket(socketfd, timelimit)){
+                if(recvfrom( socketfd, (void*)&packet, sizeof(Packet), 0, (sockaddr*)&sender_addr, &sender_addr_len ) == -1) {
+                    std::cout << "error receiveing packet" << std::endl;
+                }
+                if(packet.type== PacketType::Ack){
+                    std::cout << "Got ACK!" << std::endl;
+
+					if(sender_addr.sin_port != dest_addr.sin_port){
+						std::cout << "DIFFERENT DESTINATION!!" << std::endl;
+					}
+                    break;
+                }
+            }
+        }
+		std::cout << "will retransmit" << std::endl;
+        tries--;
+    }
+
+    if(tries==0){
+        throw ConnectionException{"Reconnection timed out"};
+    }
+
+	std::cout << "reconnect: _otherPort: " << ntohs(dest_addr.sin_port) << std::endl;
+    return std::shared_ptr<Connection>{new Connection{mode, socketfd, dest_addr, timelimit}};
+}
+
+
+
+
+
 
 //TODO: create a thread for receive
 ReceivedData Connection::receive(int receive_timelimit) {
@@ -256,7 +337,7 @@ void Connection::send(uint8_t* data, size_t size) {
             size -= PAYLOAD_LEN;
             tries = 0;
         } else {
-			printf("retransmit.\n");
+			printf("%d: retransmit to %d\n", getPort(), ntohs(_other.sin_port));
             tries++;
         }
 
@@ -291,12 +372,12 @@ Connection& Connection::operator=( Connection&& conn ) {
     return *this;
 }
 
-void Connection::sendAck(Packet* packet)
+void Connection::sendAck(Packet* packet, sockaddr_in *sender_addr)
 {
     // send ack
     packet->type = PacketType::Ack;
     packet->payload_length = 0;
-    if( sendto( _socket_fd, (const void*)packet, sizeof(Packet), 0, (sockaddr*)&_other, sizeof(sockaddr_in) ) == -1) {
+    if( sendto( _socket_fd, (const void*)packet, sizeof(Packet), 0, (sockaddr*)sender_addr, sizeof(sockaddr_in) ) == -1) {
         throw_errno("Could not send ack.");
     }
 }
@@ -339,19 +420,25 @@ void Connection::receive_thread()
 			throw_errno("Could not receive ack");
         }
 
+		//std::cout << "." << std::endl;
+
 
 		if(packet->type == PacketType::ChangeServerAddr){
             char str[INET_ADDRSTRLEN];
             inet_ntop(AF_INET, &(sender_addr.sin_addr), str, INET_ADDRSTRLEN);
-            std::cout << "changed server_addr to " << str << ":" << ntohs(sender_addr.sin_port) << std::endl;
+            std::cout << "conn" << getPort() << ": changed server_addr from " << str << ":" << ntohs(_other.sin_port)
+            		  << " to " << str << ":" << ntohs(sender_addr.sin_port) << std::endl;
             _other.sin_addr.s_addr= sender_addr.sin_addr.s_addr;
             _other.sin_port= sender_addr.sin_port;
-            sendAck(packet);
+            sendAck(packet, &sender_addr);
             continue;
 
-		}else if(sender_addr.sin_addr.s_addr !=  _other.sin_addr.s_addr ||
-           sender_addr.sin_port != _other.sin_port){
-            continue;
+		}
+        if(mode != ConnMode::Promiscuous){
+            if(sender_addr.sin_addr.s_addr !=  _other.sin_addr.s_addr ||
+                sender_addr.sin_port != _other.sin_port){
+                continue;
+            }
         }
 
         //ACKS are sent direct to ackQueue
@@ -390,7 +477,7 @@ void Connection::receive_thread()
                 data_size += packet->payload_length;
                 
 			//	printf("received seqno:%d/%d(count:%d)\n", packet->seqn, total-1, count);
-                sendAck(packet);
+                sendAck(packet, &sender_addr);
                 if( count < total ) {
                     state= recvState::RetrievingData;
                 }else{
@@ -421,7 +508,7 @@ void Connection::receive_thread()
                     data_size += packet->payload_length;
                 }
 
-                sendAck(packet);
+                sendAck(packet, &sender_addr);
 				//printf("received seqno:%d/%d(count:%d)\n", packet->seqn, total-1, count);
 
                 if( count >= total ) {
@@ -437,9 +524,11 @@ void Connection::receive_thread()
 
 
 /// Private functions
-Connection::Connection(int socket_fd, sockaddr_in other, int timelimit, int trylimit) 
+Connection::Connection(ConnMode mode, int socket_fd, sockaddr_in other, int timelimit, int trylimit) 
 	: _socket_fd{socket_fd}, _other{other}, _timelimit{timelimit}, _trylimit{trylimit} 
 {
+//	std::cout << "Connection: _otherIp: " << ntohs(other.sin_port) << std::endl;
+    this->mode= mode;
     pthread_cond_init(&ackQueueCond, NULL);
     pthread_mutex_init(&ackQueueMutex, NULL);
     pthread_mutex_init(&recvQueueMutex, NULL);
@@ -459,6 +548,60 @@ uint16_t Connection::getPort()
         return ntohs(addr.sin_port);
     }
     return 0;
+}
+
+
+
+
+
+
+
+
+static std::vector<uint32_t> getIPs()
+{
+    struct ifaddrs * ifAddrStruct=NULL;
+    struct ifaddrs * ifa=NULL;
+   // void * tmpAddrPtr=NULL;
+    getifaddrs(&ifAddrStruct);
+	std::vector<uint32_t> IPs;
+
+    for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next) {
+        if (!ifa->ifa_addr) {
+            continue;
+        }
+
+        if (ifa->ifa_addr->sa_family == AF_INET) { // check it is IP4
+            // is a valid IP4 Address
+			IPs.push_back(ntohl(((struct sockaddr_in *)ifa->ifa_addr)->sin_addr.s_addr));	
+
+            //tmpAddrPtr=&((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
+            //char addressBuffer[INET_ADDRSTRLEN];
+            //inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
+            //printf("%s IP Address %s\n", ifa->ifa_name, addressBuffer); 
+            //printf("IP Address 32bits: 0x%X\n", *(unsigned int *)tmpAddrPtr); 
+        }
+	}
+    if (ifAddrStruct!=NULL) freeifaddrs(ifAddrStruct);
+    return IPs;
+}
+
+
+
+
+
+
+std::vector<uint32_t> Connection::getIP()
+{
+    struct sockaddr_in addr;
+    socklen_t len;
+    if(getsockname(_socket_fd, (sockaddr*)&addr, &len) == 0){
+		if( ntohl(addr.sin_addr.s_addr) == 0){
+			return getIPs();
+		}
+		std::vector<uint32_t> v{ntohl(addr.sin_addr.s_addr)};
+		return v;
+    }
+	return getIPs();
 }
 
 int Connection::build_socket() {

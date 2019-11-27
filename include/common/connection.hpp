@@ -15,13 +15,23 @@ struct ReceivedData {
         : data{std::move(data)}, length{length} {}
 };
 
+enum class ConnMode{
+    Normal,
+    Promiscuous,
+};
+
 class Connection {
     public:
         // try to connect to a server
-        static std::shared_ptr<Connection> connect(const std::string&, int port, int timelimit=1000);
+        static std::shared_ptr<Connection> connect(ConnMode mode, const std::string&, int port, int timelimit=1000);
         // wait for a connection
         static std::shared_ptr<Connection> listen(int port, int min_range=10000, int max_range=40000, int timelimit=5000);
+
+        //reconstruct a connection
+        static std::shared_ptr<Connection> reconnect(ConnMode mode, uint32_t peerIP, uint16_t peerPort, 
+                                                            int min_range=10000, int max_range=40000, int timelimit=5000);
 		
+
 		void receive_thread();
 
         // receive data (non blocking);
@@ -29,12 +39,16 @@ class Connection {
         // send data (blocking)
         void send(uint8_t* data, size_t size);
 
-        // return remote port
+        // return remote ip/port
+		uint32_t getPeerIP() const { return ntohl(_other.sin_addr.s_addr); }
         uint16_t getPeerPort() const { return ntohs(_other.sin_port); }
 
-		//return local port
-		uint32_t getPeerIP() const { return ntohl(_other.sin_addr.s_addr); }
-        
+		// set remote ip/port
+		void setPeerIP(uint32_t ip) { _other.sin_addr.s_addr= htonl(ip); }
+        void setPeerPort(uint16_t port) { _other.sin_port = htons(port); }
+
+		// return local Ip/port
+		std::vector<uint32_t>getIP();
         uint16_t getPort();
 
         bool hasNewMessage(){ return !recvQueue.empty(); }
@@ -74,10 +88,11 @@ class Connection {
                 : type{type}, msg_id{msg_id}, seqn{seqn}, total{total}, payload_length{payload_length} {}
         };
 
-        Connection(int socket_fd, sockaddr_in other, int timelimit, int trylimit=5);
+        Connection(ConnMode mode, int socket_fd, sockaddr_in other, int timelimit,  int trylimit=5);
         int _socket_fd = 0;
+        ConnMode mode;
 
-		void sendAck(Packet* packet);
+		void sendAck(Packet* packet, sockaddr_in *sender_addr);
 
 		pthread_cond_t ackQueueCond;
 		pthread_mutex_t ackQueueMutex;

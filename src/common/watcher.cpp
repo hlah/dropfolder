@@ -72,6 +72,9 @@ Watcher::Event Watcher::next() {
             inotify_event* event_ptr = (inotify_event*)&buffer[i];
             auto full_name = std::string{ _dir_map_rev[event_ptr->wd] } + std::string{"/"} + std::string{ event_ptr->name };
 
+            if(event_ptr->mask & IN_Q_OVERFLOW){
+                std::cout << "WATCHER BUFFER OVERFLOW"  << std::endl;
+            }
             if( event_ptr->mask & (IN_CREATE | IN_MOVED_TO) && !(event_ptr->mask & IN_ISDIR) ) {
                 Event event{ Watcher::EventType::CREATED, full_name };
                 _event_queue.push(event);

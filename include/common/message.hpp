@@ -1,5 +1,6 @@
 #ifndef _DROPFOLDER_MESSAGE_H_
 #define _DROPFOLDER_MESSAGE_H_
+#include <memory>
 
 #define MESSAGE_MAX_FILENAME_SIZE 256
 
@@ -16,7 +17,9 @@ enum class MessageType {
     FILE_LIST,
     DROP,
     PING_REQUEST,
-	PING_RESPONSE
+	PING_RESPONSE,
+    ELECTION,
+    ELECTED
 };
 
 struct Message {
@@ -24,6 +27,18 @@ struct Message {
     char filename[MESSAGE_MAX_FILENAME_SIZE]; // user name for USERNAME and USERNAME_NOSYNC
     unsigned int file_length;
     char bytes[];
+};
+
+struct ElectionMessage {
+    MessageType type;
+    uint32_t candidateIP;
+    uint16_t candidatePort;
+};
+
+struct ElectedMessage {
+    MessageType type;
+    uint32_t newPrimaryIP;
+    uint16_t newPrimaryPort;
 };
 
 #endif //  _DROPFOLDER_MESSAGE_H_

@@ -11,6 +11,7 @@
 enum class ServerState: uint8_t{
     Primary=0,
     Replication,
+    FailureDetected,
     Electing
 };
 
@@ -32,6 +33,7 @@ private:
 
 	//replicatedServer connection with primary
 	std::unique_ptr<SyncManager> primary_sync;
+    uint16_t primary_sync_port;
 
     //primary ctrl connections with replicated servers
     std::mutex cntrl_conns_mutex;
@@ -40,6 +42,9 @@ private:
     std::mutex peers_info_mutex;
 
     uint16_t ctrl_port;
+    uint16_t ctrl_port_accept;
+    uint32_t ctrl_IP;
+
     std::string p_addr;
     uint16_t p_ctrl_port;
 
@@ -50,6 +55,8 @@ private:
     std::mutex failure_detection_mutex;
 
 //	bool gotPrimaryRMMessage;
+
+    void updatePeersInfo();
 public:
 
 	ReplicationServer(uint16_t c_port, uint16_t s_port, uint16_t ctrl_port);
@@ -61,7 +68,10 @@ public:
 	void acceptCtrlThread();
 	void cleanClientsThread();
     void failureDetectionThread();
-	
+    void electingThread(uint32_t candidateIP, uint16_t candidatePort);
+
+    void newPrimaryAddConns();
+
 
 //	void ImAlive_thread();
 //	void RMAddToGroup_thread();

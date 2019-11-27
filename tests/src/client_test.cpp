@@ -3,7 +3,7 @@
 #include <iostream>
 
 int main() {
-    auto conn = Connection::connect( "localhost", 4001 );
+    auto conn = Connection::connect(ConnMode::Normal, "localhost", 4001 );
     std::cout << "Connected to server (server port= " << conn->getPeerPort() << ")\n";
     std::cout << "my port: " << conn->getPort() << ")\n";
 

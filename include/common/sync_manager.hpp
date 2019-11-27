@@ -13,7 +13,9 @@ class SyncManager {
 		enum class SyncMode: uint8_t {
 			Client,
 			Server,
+			ServerReconstruction,
 			Primary,
+			PrimaryReconstruction,
 			Replicated
 		};
 
@@ -31,6 +33,9 @@ class SyncManager {
         );
 
         /// Start server or primary syncroniztion
+		//
+		SyncManager(SyncMode mode, std::shared_ptr<Connection> conn);
+		SyncManager(SyncMode mode, std::shared_ptr<Connection> conn, std::string user_name);
         SyncManager( int port, SyncMode mode= SyncMode::Server);
         SyncManager( SyncManager&& other ) = default;
 
@@ -40,11 +45,14 @@ class SyncManager {
         bool alive() const { return !*_stop; }
         
         /// Stop syncrionization
-        void stop_sync();
+        void stop_sync(){*_stop= true;};
 
 		///get sync infos
 		uint32_t getPeerIP() { return _conn->getPeerIP();}
 		uint16_t getPeerPort() { return _conn->getPeerPort();}
+		uint16_t getPort() { return _conn->getPort();}
+
+
 	   //TODO: how to get username?? 
 	   //      it's discovered after, at sync_thread function, not inside class SyncManager
 		std::string getUsername() { return username;}
