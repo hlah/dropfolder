@@ -298,15 +298,13 @@ void SyncManager::syncThread() {
                 case MessageType::DELETE_FILE:
                     print_msg(std::string{"Deleted "} + filepath + std::string{" localy."}, client_mode);
                     std::remove( filepath.c_str() );
-                    //ignore.push_back( filepath );
-		    watcher.discard();
+                    ignore.push_back( filepath );
                     break;
                 case MessageType::UPDATE_FILE:
                     {
                         std::ofstream ofs{ filepath.c_str(), std::ios::binary | std::ios::trunc };
                         ofs.write( message->bytes, message->file_length );
-                        //ignore.push_back( filepath );
-			watcher.discard();
+                        ignore.push_back( filepath );
                         print_msg(std::string{"Updated "} + filepath + std::string{" localy. ("} + std::to_string(message->file_length) + std::string{" bytes)"}, client_mode);
                     }
                     break;
