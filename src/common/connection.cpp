@@ -592,15 +592,15 @@ static std::vector<uint32_t> getIPs()
 
 std::vector<uint32_t> Connection::getIP()
 {
-    struct sockaddr_in addr;
-    socklen_t len;
-    if(getsockname(_socket_fd, (sockaddr*)&addr, &len) == 0){
-		if( ntohl(addr.sin_addr.s_addr) == 0){
-			return getIPs();
-		}
-		std::vector<uint32_t> v{ntohl(addr.sin_addr.s_addr)};
-		return v;
-    }
+//    struct sockaddr_in addr;
+//    socklen_t len;
+//    if(getsockname(_socket_fd, (sockaddr*)&addr, &len) == 0){
+//		if( ntohl(addr.sin_addr.s_addr) == 0){
+//			return getIPs();
+//		}
+//		std::vector<uint32_t> v{ntohl(addr.sin_addr.s_addr)};
+//		return v;
+//    }
 	return getIPs();
 }
 
