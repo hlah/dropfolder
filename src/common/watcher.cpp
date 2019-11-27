@@ -7,6 +7,7 @@
 #include <sys/inotify.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <poll.h>
 
 #include "common.hpp"
 
@@ -61,11 +62,15 @@ Watcher::Event Watcher::next() {
     char buffer[BUF_LEN] = {0};
 
     if ( _event_queue.empty() ) {
-        // read events
-        auto bytes_read = read(_fd, buffer, BUF_LEN );
-        if( bytes_read <= 0 ) {
+        // check if has new events
+        pollfd pfd{ _fd, POLLIN, 0 };
+        auto poll_result = poll( &pfd, 1, 0 );
+        if( !(poll_result | POLLIN) ) {
             return Event{ Watcher::EventType::NOEVENT, "" };
         }
+
+        // read events
+        auto bytes_read = read(_fd, buffer, BUF_LEN );
 
         long long i = 0;
         while( i < bytes_read ) {
